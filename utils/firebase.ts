@@ -1,4 +1,4 @@
-// utils/firebase.ts
+/// utils/firebase.ts
 import { initializeApp, getApp, getApps, type FirebaseOptions } from 'firebase/app'
 import { getDatabase, ref, set, onValue, get, update } from 'firebase/database'
 import {
@@ -9,8 +9,8 @@ import {
   sendPasswordResetEmail,
 } from 'firebase/auth'
 
-// 🔧 Fill with your real config
-const firebaseConfig = {
+// Read from env vars (set in .env.local and Vercel → Settings → Environment Variables)
+const cfg: FirebaseOptions = {
   apiKey: 'AIzaSyAqbORGv22jFVblz05CtrXffZSKKwYeWys',
   authDomain: 'worship-presentation.firebaseapp.com',
   databaseURL: 'https://worship-presentation-default-rtdb.europe-west1.firebasedatabase.app',
@@ -20,8 +20,8 @@ const firebaseConfig = {
   appId: '1:282827808544:web:056ad57a65bd003a2bc145',
 }
 
-// Initialize (avoid re-initializing in hot reload)
-const app = getApps().length ? getApp() : initializeApp(config)
+// Avoid re-initializing in hot reload
+const app = getApps().length ? getApp() : initializeApp(cfg)
 const db = getDatabase(app)
 const auth = getAuth(app)
 
