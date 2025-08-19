@@ -10,7 +10,7 @@ import {
 } from 'firebase/auth'
 
 // Read from env vars (Vercel + .env.local)
-const config: FirebaseOptions = {
+const cfg: FirebaseOptions = {
   apiKey: AIzaSyAqbORGv22jFVblz05CtrXffZSKKwYeWys,
   authDomain: worship-presentation.firebaseapp.com,
   databaseURL: https://worship-presentation-default-rtdb.europe-west1.firebasedatabase.app, // optional is fine
@@ -21,7 +21,7 @@ const config: FirebaseOptions = {
 }
 
 // Avoid re-initializing during HMR
-const app = getApps().length ? getApp() : initializeApp(config)
+const app = getApps().length ? getApp() : initializeApp(cfg)
 const db = getDatabase(app)
 const auth = getAuth(app)
 
