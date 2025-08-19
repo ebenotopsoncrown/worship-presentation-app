@@ -21,7 +21,7 @@ const cfg: FirebaseOptions = {
 }
 
 // Avoid re-initializing during HMR
-const app = getApps().length ? getApp() : initializeApp(cfg)
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig)
 const db = getDatabase(app)
 const auth = getAuth(app)
 
