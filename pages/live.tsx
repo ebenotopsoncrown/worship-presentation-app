@@ -1,7 +1,8 @@
 // pages/live.tsx
 import dynamic from 'next/dynamic'
 import { useEffect, useState } from 'react'
-import { db, ref as dbRef, onValue } from '../utils/firebase'
+import { db, dbRef, onValue } from '../utils/firebase'
+
 
 type Theme = {
   fontSize: number

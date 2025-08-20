@@ -70,5 +70,5 @@ function RemotePage() {
   )
 }
 export default dynamic(() => Promise.resolve(RemotePage), { ssr: false })
-export { _ref as ref }   // <- optional compatibility export
+
 
