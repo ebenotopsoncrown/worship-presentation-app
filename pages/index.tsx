@@ -1,9 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { db, dbRef, onValue, set } from '../utils/firebase'
+import HymnDisplay from '../components/HymnDisplay'
+import BibleDisplay from '../components/BibleDisplay'
+import SlidesMini from '../components/SlidesMini'
 
 type SlotData = {
   id: string
-  kind?: 'workspace'|'hymn'|'bible'
+  kind?: 'workspace'|'hymn'|'bible'|'slides'
   title?: string
   html?: string
   lines?: string[]
@@ -171,24 +174,42 @@ export default function Operator() {
         </section>
       </div>
 
-      {/* --------- PAGE-SCOPED CSS (forces the horizontal layout) ---------- */}
+      {/* ---- NEW: bottom row with Hymns / Bible / Slides ---- */}
+      <div className="bottom">
+        <div className="panel">
+          <div className="panel-title">Hymns</div>
+          <HymnDisplay />
+        </div>
+        <div className="panel">
+          <div className="panel-title">Bible</div>
+          <BibleDisplay />
+        </div>
+        <div className="panel">
+          <div className="panel-title">Slides</div>
+          <SlidesMini />
+        </div>
+      </div>
+
+      {/* --------- PAGE-SCOPED CSS ---------- */}
       <style jsx global>{`
         :root{
-          --bg1:#0f172a;--bg2:#1e293b;--fg:#e5e7eb;--dim:#94a3b8;--glass:rgba(255,255,255,.06);
+          /* same sizing & spacing; ONLY changed the colour scheme below */
+          --fg:#e5e7eb;--dim:#94a3b8;--glass:rgba(255,255,255,.06);
         }
         html,body {height:100%}
         body{
           margin:0;color:var(--fg);
+          /* lighter wine + royal blue blend (keeps your current vibe) */
           background:
-            radial-gradient(80rem 80rem at -10% -10%, rgba(34,211,238,.12), transparent 35%),
-            radial-gradient(60rem 60rem at 110% -10%, rgba(99,102,241,.18), transparent 40%),
-            linear-gradient(135deg,var(--bg1),var(--bg2));
+            radial-gradient(80rem 80rem at -10% -10%, rgba(130,48,86,.16), transparent 36%),
+            radial-gradient(60rem 60rem at 110% -10%, rgba(45,62,158,.22), transparent 42%),
+            linear-gradient(135deg,#0b1220,#111a34);
           font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
         }
 
         /* THE ROW */
         .layout{
-          height:100vh; box-sizing:border-box; padding:16px;
+          box-sizing:border-box; padding:16px 16px 0 16px;
           display:flex; gap:16px; align-items:stretch;
         }
         .col{min-width:0; display:flex; flex-direction:column}
@@ -203,7 +224,7 @@ export default function Operator() {
           border-radius:12px; padding:14px;
           backdrop-filter: blur(8px);
           box-shadow: 0 18px 36px rgba(0,0,0,.35);
-          display:flex; flex-direction:column; min-height:0; /* stretch */
+          display:flex; flex-direction:column; min-height:0;
         }
         .panel-title{font-weight:700;margin-bottom:10px}
 
@@ -246,16 +267,20 @@ export default function Operator() {
         .empty{color:var(--dim)}
 
         /* live preview */
-        .live-iframe{
-          width:100%; height:100%;
-          border:none; border-radius:12px; background:#000;
+        .live-iframe{ width:100%; height:100%; border:none; border-radius:12px; background:#000; }
+
+        /* bottom row (new) */
+        .bottom{
+          display:grid; grid-template-columns: 1fr 1fr 1fr;
+          gap:16px; padding:16px;
         }
 
-        /* responsive fallback (small laptop widths) */
+        /* responsive fallback */
         @media (max-width: 1200px){
           .col.workspace{flex-basis:50%}
           .col.preview{flex-basis:32%}
           .col.live{flex-basis:18%}
+          .bottom{grid-template-columns:1fr}
         }
         @media (max-width: 980px){
           .layout{flex-direction:column}
