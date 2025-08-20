@@ -66,3 +66,26 @@ export default function ThemeSettings() {
     </div>
   )
 }
+
+// inside ThemeSettings component UI
+<div className="mt-4 border-t pt-3">
+  <div className="font-semibold mb-2">Presentation</div>
+  <div className="flex items-center gap-2 mb-2">
+    <label className="w-40">Verses per slide</label>
+    <input className="border px-2 py-1 w-20 rounded" type="number" min={1}
+           value={presentation.versesPerSlide ?? 2}
+           onChange={e=>setPresentation((p:any)=>({ ...p, versesPerSlide:Number(e.target.value||1) }))}/>
+  </div>
+  <div className="flex items-center gap-2">
+    <label className="w-40">Hymn lines per slide</label>
+    <input className="border px-2 py-1 w-20 rounded" type="number" min={1}
+           value={presentation.hymnLinesPerSlide ?? 2}
+           onChange={e=>setPresentation((p:any)=>({ ...p, hymnLinesPerSlide:Number(e.target.value||1) }))}/>
+  </div>
+  <button onClick={()=>set(dbRef(db,'settings/presentation'), presentation)}
+          className="mt-2 px-3 py-1 border rounded">Save Presentation Settings</button>
+</div>
+
+const [presentation, setPresentation] = useState<any>({ versesPerSlide:2, hymnLinesPerSlide:2 })
+useEffect(()=> onValue(dbRef(db,'settings/presentation'), s => setPresentation({ ...{versesPerSlide:2,hymnLinesPerSlide:2 }, ...(s.val()||{}) })),[])
+

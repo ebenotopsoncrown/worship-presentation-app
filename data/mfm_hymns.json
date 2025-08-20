@@ -1,0 +1,16 @@
+[
+  {
+    "number": 1,
+    "title": "Example MFM Hymn",
+    "lyrics": [
+      "First line of hymn",
+      "Second line of hymn",
+      "Third line of hymn"
+    ]
+  },
+  {
+    "number": 2,
+    "title": "Another MFM Hymn",
+    "lyrics": ["Line A", "Line B", "Line C"]
+  }
+]

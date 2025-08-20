@@ -11,7 +11,8 @@
     "firebase": "^12.1.0",
     "next": "latest",
     "react": "latest",
-    "react-dom": "latest"
+    "react-dom": "latest",
+    "react-quill": "^2.0.0"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",

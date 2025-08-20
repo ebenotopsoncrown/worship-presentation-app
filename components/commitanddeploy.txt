@@ -1,0 +1,6 @@
+cd "C:\Users\User\Videos\New folder\worship-presentation-app"
+
+git add components\BibleDisplay.tsx components\HymnDisplay.tsx
+git add components\PreviewBoard.tsx pages\index.tsx pages\live.tsx 2>nul
+git commit -m "Bible/Hymn send to Preview; preview board hooked up; grouped display on Live"
+git push

@@ -1,100 +1,167 @@
+// components/QueuePanel.tsx
+'use client'
 import { useEffect, useState } from 'react'
-import { db, ref as dbRef, onValue, set, get } from '../utils/firebase'
+import { db, ref as dbRef, onValue, set, get, update } from '../utils/firebase'
 
-type QueueItem = {
-  id: string
-  kind: 'hymn' | 'bible' | 'slide'
-  title: string
-  content: string[] // text lines or ['<img ...>']
-}
+type Item =
+  | { id:string; kind:'hymn'|'bible'|'slide'|'html'; title:string; content:string[] }
+  | { id:string; kind:'timer'; title:string; durationSec:number }
+
+type ServiceSet = { id:string; name:string; createdAt:number; items:Item[] }
 
 export default function QueuePanel() {
-  const [queue, setQueue] = useState<QueueItem[]>([])
-  const [currentIndex, setCurrentIndex] = useState<number>(-1)
+  const [items, setItems] = useState<Item[]>([])
+  const [sets, setSets] = useState<ServiceSet[]>([])
+  const [newSetName, setNewSetName] = useState('')
+  const [versesPerSlide, setVersesPerSlide] = useState(2)
+  const [hymnLinesPerSlide, setHymnLinesPerSlide] = useState(2)
 
-  // Live helpers
-  const goLiveIndex = async (idx: number) => {
-    if (idx < 0 || idx >= queue.length) return
-    await set(dbRef(db, 'live_content'), queue[idx].content)
-    await set(dbRef(db, 'live_state'), { mode: 'content' })
-    await set(dbRef(db, 'queue_current'), idx)
-  }
-  const next = () => goLiveIndex(currentIndex + 1)
-  const prev = () => goLiveIndex(currentIndex - 1)
-
-  const setBlack = async () => {
-    await set(dbRef(db, 'live_state'), { mode: 'black' })
-  }
-  const setClear = async () => {
-    await set(dbRef(db, 'live_state'), { mode: 'clear' })
-  }
-
-  // Load queue + current index in realtime
   useEffect(() => {
-    const u1 = onValue(dbRef(db, 'queue'), snap => setQueue(snap.val() || []))
-    const u2 = onValue(dbRef(db, 'queue_current'), snap => setCurrentIndex(snap.val() ?? -1))
-    return () => { u1(); u2() }
+    const u = onValue(dbRef(db,'queue'), s => setItems(s.val() || []))
+    const u2 = onValue(dbRef(db,'service_sets'), s => {
+      const v = s.val() || {}; const arr = Object.entries(v).map(([id,val]:any)=>({id,...val}))
+      setSets(arr.sort((a,b)=>b.createdAt-a.createdAt))
+    })
+    const u3 = onValue(dbRef(db,'settings/presentation'), s => {
+      const p = s.val() || {}
+      setVersesPerSlide(p.versesPerSlide ?? 2)
+      setHymnLinesPerSlide(p.hymnLinesPerSlide ?? 2)
+    })
+    return () => { u(); u2(); u3() }
   }, [])
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); next() }
-      if (e.key === 'ArrowLeft') { e.preventDefault(); prev() }
-      if (e.key.toLowerCase() === 'b') { e.preventDefault(); setBlack() }
-      if (e.key.toLowerCase() === 'c') { e.preventDefault(); setClear() }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [currentIndex, queue])
-
-  // Queue ops
-  const writeQueue = async (items: QueueItem[]) => set(dbRef(db, 'queue'), items)
-
-  const move = async (idx: number, dir: -1 | 1) => {
-    const target = idx + dir
-    if (target < 0 || target >= queue.length) return
-    const copy = [...queue]
-    ;[copy[idx], copy[target]] = [copy[target], copy[idx]]
-    await writeQueue(copy)
+  const savePresentationSettings = async () => {
+    await update(dbRef(db,'settings/presentation'), { versesPerSlide, hymnLinesPerSlide })
   }
 
-  const removeAt = async (idx: number) => {
-    const copy = queue.filter((_, i) => i !== idx)
-    await writeQueue(copy)
-    // adjust current index if needed
-    const newCurrent = currentIndex >= copy.length ? copy.length - 1 : currentIndex
-    await set(dbRef(db, 'queue_current'), newCurrent)
+  const move = async (i:number, d:-1|1) => {
+    const arr = [...items]; const j = i+d; if (j<0 || j>=arr.length) return
+    ;[arr[i], arr[j]] = [arr[j], arr[i]]; await set(dbRef(db,'queue'), arr)
+  }
+  const remove = async (i:number) => {
+    const arr = [...items]; arr.splice(i,1); await set(dbRef(db,'queue'), arr)
+  }
+
+  const previewItem = async (it: Item) => {
+    // find first empty slot
+    let slot = 0
+    for (let i=0;i<4;i++){ const s = await get(dbRef(db,`preview_slots/${i}`)); if (!s.exists() || !s.val()){ slot = i; break } }
+    if (it.kind === 'timer'){
+      await set(dbRef(db, `preview_slots/${slot}`), { id:it.id, title:it.title, kind:'html', html:`<h2>${it.title}</h2><p>${it.durationSec}s</p>` })
+      return
+    }
+    await set(dbRef(db, `preview_slots/${slot}`), {
+      id: it.id, title: it.title, kind: it.kind, lines: it.content,
+      groupSize: it.kind==='bible' ? versesPerSlide : (it.kind==='hymn'? hymnLinesPerSlide : 1)
+    })
+  }
+
+  const goLive = async (it: Item) => {
+    if (it.kind === 'timer') {
+      const endAt = Date.now() + it.durationSec*1000
+      await set(dbRef(db,'timer'), { endAt, title: it.title })
+      await set(dbRef(db,'live_state'), { mode:'timer' })
+      return
+    }
+    const gs = it.kind==='bible' ? versesPerSlide : (it.kind==='hymn' ? hymnLinesPerSlide : 1)
+    await set(dbRef(db,'live_content'), it.content)
+    await set(dbRef(db,'live_group_size'), gs)
+    await set(dbRef(db,'live_cursor'), 0)
+    await set(dbRef(db,'live_state'), { mode: 'content' })
+  }
+
+  const next = async () => {
+    const sizeSnap = await get(dbRef(db,'live_group_size'))
+    const step = Math.max(1, Number(sizeSnap.val() || 1))
+    const cur = Number((await get(dbRef(db,'live_cursor'))).val() || 0)
+    await set(dbRef(db,'live_cursor'), cur + step)
+  }
+  const prev = async () => {
+    const sizeSnap = await get(dbRef(db,'live_group_size'))
+    const step = Math.max(1, Number(sizeSnap.val() || 1))
+    const cur = Number((await get(dbRef(db,'live_cursor'))).val() || 0)
+    await set(dbRef(db,'live_cursor'), Math.max(0, cur - step))
+  }
+  const black = async () => set(dbRef(db,'live_state'), { mode:'black' })
+  const clear = async () => set(dbRef(db,'live_state'), { mode:'clear' })
+
+  const saveSet = async () => {
+    if (!newSetName.trim()) return
+    const id = crypto.randomUUID()
+    await update(dbRef(db,`service_sets/${id}`), { name: newSetName.trim(), createdAt: Date.now(), items })
+    setNewSetName('')
+  }
+  const loadSetReplace = async (id:string) => {
+    const snap = await get(dbRef(db,`service_sets/${id}`))
+    const data = snap.val() as ServiceSet
+    if (!data) return
+    await set(dbRef(db,'queue'), data.items || [])
+  }
+
+  const addCountdown = async () => {
+    const mins = Number(prompt('Countdown minutes?', '5') || 0); if (!mins) return
+    const arr = [...items, { id:`${Date.now()}-timer`, kind:'timer', title:`Countdown ${mins}m`, durationSec: mins*60 }]
+    await set(dbRef(db,'queue'), arr)
   }
 
   return (
-    <div>
-      <div className="flex items-center gap-2 mb-3">
-        <button onClick={prev} className="px-3 py-1 bg-gray-700 text-white rounded">◀ Prev</button>
-        <button onClick={next} className="px-3 py-1 bg-gray-700 text-white rounded">Next ▶</button>
-        <button onClick={setBlack} className="px-3 py-1 bg-black text-white rounded">Black</button>
-        <button onClick={setClear} className="px-3 py-1 bg-white text-black border rounded">Clear</button>
-        <span className="ml-2 text-sm text-gray-600">Shortcuts: ←/→/Space, B, C</span>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <button onClick={prev} className="px-2 py-1 border rounded">Prev</button>
+        <button onClick={next} className="px-2 py-1 border rounded">Next</button>
+        <button onClick={black} className="px-2 py-1 border rounded">Black</button>
+        <button onClick={clear} className="px-2 py-1 border rounded">Clear</button>
+        <button onClick={addCountdown} className="px-2 py-1 border rounded">+ Countdown</button>
       </div>
 
-      <ul className="space-y-2">
-        {queue.map((item, idx) => (
-          <li key={item.id} className={`p-3 rounded border bg-white flex items-center gap-2 ${idx === currentIndex ? 'ring-2 ring-blue-500' : ''}`}>
-            <div className="text-xs uppercase text-gray-500 w-16">{item.kind}</div>
+      <div className="bg-white rounded border p-2">
+        <div className="font-semibold mb-2">Presentation settings</div>
+        <div className="flex gap-2 items-center mb-2">
+          <label>Verses per slide</label>
+          <input type="number" min={1} value={versesPerSlide}
+                 onChange={e=>setVersesPerSlide(Number(e.target.value||1))}
+                 className="border px-2 py-1 w-20 rounded"/>
+          <label>Hymn lines per slide</label>
+          <input type="number" min={1} value={hymnLinesPerSlide}
+                 onChange={e=>setHymnLinesPerSlide(Number(e.target.value||1))}
+                 className="border px-2 py-1 w-20 rounded"/>
+          <button onClick={savePresentationSettings} className="px-2 py-1 border rounded">Save</button>
+        </div>
+      </div>
+
+      <ul className="divide-y bg-white rounded border">
+        {items.map((it,i)=>(
+          <li key={it.id} className="flex items-center gap-2 p-2">
             <div className="flex-1">
-              <div className="font-medium">{item.title}</div>
-              <div className="text-xs text-gray-500 truncate">{item.content[0]?.replace(/<[^>]*>/g, '').slice(0, 80)}</div>
+              <div className="font-semibold">{it.title}</div>
+              <div className="text-xs text-gray-500">{it.kind.toUpperCase()}</div>
             </div>
-            <div className="flex items-center gap-1">
-              <button onClick={() => move(idx, -1)} className="px-2 py-1 border rounded">↑</button>
-              <button onClick={() => move(idx, 1)} className="px-2 py-1 border rounded">↓</button>
-              <button onClick={() => goLiveIndex(idx)} className="px-3 py-1 bg-blue-600 text-white rounded">Go Live</button>
-              <button onClick={() => removeAt(idx)} className="px-2 py-1 border rounded text-red-600">✕</button>
-            </div>
+            <button onClick={()=>move(i,-1)} className="px-2 py-1 border rounded">↑</button>
+            <button onClick={()=>move(i, +1)} className="px-2 py-1 border rounded">↓</button>
+            <button onClick={()=>previewItem(it)} className="px-2 py-1 border rounded">Preview</button>
+            <button onClick={()=>goLive(it)} className="px-2 py-1 bg-blue-600 text-white rounded">Go Live</button>
+            <button onClick={()=>remove(i)} className="px-2 py-1 border rounded">✕</button>
           </li>
         ))}
+        {!items.length && <li className="p-3 text-sm text-gray-500">Queue is empty.</li>}
       </ul>
-      {queue.length === 0 && <p className="text-gray-500">Queue is empty. Use “Add to Queue” in Hymns/Bible/Slides.</p>}
+
+      <div className="bg-white rounded border p-3">
+        <div className="font-semibold mb-2">Service Sets</div>
+        <div className="flex gap-2 mb-2">
+          <input value={newSetName} onChange={e=>setNewSetName(e.target.value)}
+                 placeholder="Service name (e.g., Sunday 9am)" className="border rounded px-2 py-1 flex-1"/>
+          <button onClick={saveSet} className="px-2 py-1 border rounded">Save current queue</button>
+        </div>
+        <ul className="space-y-1 max-h-40 overflow-auto">
+          {sets.map(s=>(
+            <li key={s.id} className="flex items-center gap-2">
+              <span className="flex-1">{s.name}</span>
+              <button onClick={()=>loadSetReplace(s.id)} className="px-2 py-1 border rounded">Load (replace)</button>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   )
 }
