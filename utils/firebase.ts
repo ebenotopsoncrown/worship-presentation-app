@@ -1,6 +1,13 @@
 // utils/firebase.ts
-import { initializeApp, getApp, getApps, type FirebaseOptions } from 'firebase/app'
-import { getDatabase, ref, set, onValue, get, update } from 'firebase/database'
+import { initializeApp, getApps, type FirebaseOptions } from 'firebase/app'
+import {
+  getDatabase,
+  ref as _ref,
+  set,
+  onValue,
+  get,
+  update,
+} from 'firebase/database'
 import {
   getAuth,
   signInWithEmailAndPassword,
@@ -9,7 +16,6 @@ import {
   sendPasswordResetEmail,
 } from 'firebase/auth'
 
-// Read from env vars (Vercel + .env.local)
 const cfg: FirebaseOptions = {
   apiKey: AIzaSyAqbORGv22jFVblz05CtrXffZSKKwYeWys,
   authDomain: worship-presentation.firebaseapp.com,
@@ -20,12 +26,14 @@ const cfg: FirebaseOptions = {
   appId: 1:282827808544:web:056ad57a65bd003a2bc145,
 }
 
-// Avoid re-initializing during HMR
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig)
-const db = getDatabase(app)
-const auth = getAuth(app)
+const app = getApps().length ? getApps()[0] : initializeApp(cfg)
 
-export {
-  db, ref, set, onValue, get, update,
-  auth, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail
-}
+export const db = getDatabase(app)
+export const auth = getAuth(app)
+
+// DB helpers
+export const dbRef = _ref
+export { set, onValue, get, update }
+
+// Auth helpers (so you can import from here)
+export { signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail }
