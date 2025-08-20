@@ -37,3 +37,4 @@ export { set, onValue, get, update }
 
 // Auth helpers
 export { signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail }
+export { _ref as ref }   

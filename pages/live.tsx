@@ -1,4 +1,5 @@
 // pages/live.tsx
+import dynamic from 'next/dynamic'
 import { useEffect, useState } from 'react'
 import { db, ref as dbRef, onValue } from '../utils/firebase'
 
@@ -12,7 +13,7 @@ type Theme = {
   shadow?: boolean
 }
 
-export default function LiveScreen() {
+function LiveScreen() {
   const [content, setContent] = useState<string[]>([])
   const [mode, setMode] = useState<'content'|'black'|'clear'|'timer'>('content')
   const [cursor, setCursor] = useState(0)
@@ -75,3 +76,5 @@ export default function LiveScreen() {
     </div>
   )
 }
+
+export default dynamic(() => Promise.resolve(LiveScreen), { ssr: false })

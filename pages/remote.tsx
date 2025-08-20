@@ -1,10 +1,11 @@
+import dynamic from 'next/dynamic'
 import { useEffect, useState } from 'react'
 import { auth, onAuthStateChanged } from '../utils/firebase'
 import { db, dbRef, set, onValue, get, update } from '../utils/firebase'
 
 type Item = { id:string; title:string; content:string[]; kind:string }
 
-export default function Remote() {
+function RemotePage() {
   const [user, setUser] = useState<any>(null)
   const [queue, setQueue] = useState<Item[]>([])
   const [current, setCurrent] = useState<number>(-1)
@@ -68,6 +69,6 @@ export default function Remote() {
     </div>
   )
 }
-
+export default dynamic(() => Promise.resolve(RemotePage), { ssr: false })
 export { _ref as ref }   // <- optional compatibility export
 
