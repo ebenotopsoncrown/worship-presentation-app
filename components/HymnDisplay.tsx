@@ -1,65 +1,52 @@
-'use client'
-import { useMemo, useState } from 'react'
-import hymnsData from '../data/hymns.json'
-import { db, ref as dbRef, set, get } from '../utils/firebase'
+// components/HymnDisplay.tsx
+import React, { useEffect, useMemo, useState } from 'react'
+import hymns from '../data/hymns.json'
+import { db, dbRef, set } from '../utils/firebase'
 
-type Hymn = { title: string; lyrics: string[] }
-
-async function firstEmptySlot() {
-  for (let i = 0; i < 4; i++) {
-    const s = await get(dbRef(db, `preview_slots/${i}`))
-    if (!s.exists() || !s.val()) return i
-  }
-  return 0
-}
+type Hymn = { title: string; verses: string[] }
 
 export default function HymnDisplay() {
   const [q, setQ] = useState('')
-  const hymns = (hymnsData as Hymn[]) || []
+  const [slot, setSlot] = useState(0)
+
   const list = useMemo(() => {
-    const t = q.trim().toLowerCase()
-    if (!t) return hymns
-    return hymns.filter(h => h.title.toLowerCase().includes(t))
+    const term = q.trim().toLowerCase()
+    if (!term) return hymns as Hymn[]
+    return (hymns as Hymn[]).filter(h => h.title.toLowerCase().includes(term))
   }, [q])
 
-  const preview = async (h: Hymn) => {
-    const pSnap = await get(dbRef(db,'settings/presentation'))
-    const hymnLinesPerSlide = Number((pSnap.val()?.hymnLinesPerSlide) ?? 2)
-    const slot = await firstEmptySlot()
-    await set(dbRef(db, `preview_slots/${slot}`), {
-      id: `${Date.now()}-hymn`,
-      title: h.title,
-      kind: 'hymn',
-      lines: h.lyrics,
-      groupSize: hymnLinesPerSlide
-    })
-  }
-
-  const addToQueue = async (h:Hymn) => {
-    const qref = dbRef(db,'queue')
-    const snap = await get(qref)
-    const list = (snap.val() || []) as any[]
-    list.push({
-      id: `${Date.now()}-hymn`,
-      kind: 'hymn',
-      title: h.title,
-      content: h.lyrics
-    })
-    await set(qref, list)
+  const sendToPreview = async (h: Hymn) => {
+    // Combine verses as HTML blocks (each verse => <p>)
+    const lines = h.verses.map(v => `<p>${escapeHtml(v)}</p>`)
+    await set(dbRef(db, `preview_board/${slot}`), lines)
   }
 
   return (
-    <div>
-      <h2 className="text-xl font-bold mb-2">Hymns</h2>
-      <input className="border px-3 py-2 rounded w-full mb-2" value={q} onChange={e=>setQ(e.target.value)} placeholder="Search hymns…" />
-      <ul className="space-y-1 max-h-60 overflow-auto">
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <input
+          placeholder="Search hymns…"
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          className="border rounded px-2 py-1"
+        />
+        <select value={slot} onChange={e => setSlot(parseInt(e.target.value,10))} className="border rounded px-2 py-1">
+          <option value={0}>Preview 1</option><option value={1}>Preview 2</option><option value={2}>Preview 3</option><option value={3}>Preview 4</option>
+        </select>
+      </div>
+
+      <ul className="space-y-1">
         {list.map((h, i) => (
           <li key={i} className="flex items-center gap-2">
-            <button onClick={()=>preview(h)} className="text-blue-700 underline">{h.title}</button>
-            <button onClick={()=>addToQueue(h)} className="text-xs px-2 py-1 border rounded">Add to Queue</button>
+            <button className="px-2 py-1 rounded border bg-white">{h.title}</button>
+            <button className="text-red-500" onClick={() => sendToPreview(h)}>Preview</button>
           </li>
         ))}
       </ul>
     </div>
   )
+}
+
+function escapeHtml(s: string) {
+  return s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m] as string))
 }

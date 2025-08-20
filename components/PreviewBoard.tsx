@@ -1,83 +1,48 @@
 // components/PreviewBoard.tsx
-'use client'
-import { useEffect, useState } from 'react'
-import { db, ref as dbRef, onValue, set, get } from '../utils/firebase'
-
-type Slot = {
-  id: string
-  title: string
-  kind: 'bible'|'hymn'|'slide'|'html'
-  lines?: string[]        // for bible/hymn/slide text
-  html?: string           // for rich HTML from Workspace
-  groupSize?: number      // how many lines/verses per slide
-} | null
+import React, { useEffect, useState } from 'react'
+import { db, dbRef, onValue, set } from '../utils/firebase'
 
 const SLOT_COUNT = 4
 
 export default function PreviewBoard() {
-  const [slots, setSlots] = useState<Slot[]>(Array(SLOT_COUNT).fill(null))
+  const [board, setBoard] = useState<string[][]>(Array.from({ length: SLOT_COUNT }, () => []))
 
   useEffect(() => {
-    const unsubs = Array.from({length:SLOT_COUNT}, (_,i)=>{
-      return onValue(dbRef(db, `preview_slots/${i}`), s => {
-        setSlots(prev => {
-          const copy = prev.slice()
-          copy[i] = s.val() || null
-          return copy
-        })
-      })
+    const off = onValue(dbRef(db, 'preview_board'), snap => {
+      const v = snap.val() as string[][] | null
+      const filled = Array.from({ length: SLOT_COUNT }, (_, i) => (v && v[i]) || [])
+      setBoard(filled)
     })
-    return () => unsubs.forEach(u=>u())
+    return () => off()
   }, [])
 
-  const clearSlot = async (i:number) => set(dbRef(db, `preview_slots/${i}`), null)
-
-  const goLive = async (i:number) => {
-    const slot = slots[i]
-    if (!slot) return
-    if (slot.html) {
-      await set(dbRef(db, 'live_content'), [slot.html])
-      await set(dbRef(db, 'live_group_size'), 1)
-      await set(dbRef(db, 'live_state'), { mode:'content' })
-      await set(dbRef(db, 'live_cursor'), 0)
-      return
-    }
-    const lines = slot.lines || []
-    const gs = Math.max(1, slot.groupSize || 1)
-    await set(dbRef(db, 'live_content'), lines)
-    await set(dbRef(db, 'live_group_size'), gs)
-    await set(dbRef(db, 'live_state'), { mode:'content' })
-    await set(dbRef(db, 'live_cursor'), 0)
+  const goLive = async (i: number) => {
+    await set(dbRef(db, 'live_content'), board[i] || [])
+    await set(dbRef(db, 'live_mode'), 'content')
+  }
+  const clearSlot = async (i: number) => {
+    await set(dbRef(db, `preview_board/${i}`), [])
   }
 
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {slots.map((slot, i) => (
-          <div key={i} className="bg-white rounded border shadow p-3 min-h-[180px] flex flex-col">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="font-semibold flex-1">Preview {i+1}</div>
-              <button onClick={()=>clearSlot(i)} className="px-2 py-1 border rounded">Clear</button>
-              <button onClick={()=>goLive(i)} className="px-2 py-1 bg-blue-600 text-white rounded">Go Live</button>
+    <div className="grid grid-cols-2 gap-2">
+      {board.map((group, i) => (
+        <div key={i} className="rounded border border-gray-300 bg-white">
+          <div className="flex items-center justify-between px-2 py-1 border-b">
+            <div className="text-sm font-semibold">Preview {i + 1}</div>
+            <div className="space-x-2">
+              <button onClick={() => clearSlot(i)} className="text-xs px-2 py-1 rounded bg-gray-200">Clear</button>
+              <button onClick={() => goLive(i)} className="text-xs px-2 py-1 rounded bg-emerald-600 text-white">Go Live</button>
             </div>
-            {!slot && <div className="text-sm text-gray-500">Empty</div>}
-            {slot && (
-              <>
-                <div className="text-xs text-gray-500 mb-1">{slot.kind.toUpperCase()}</div>
-                <div className="overflow-auto text-sm" style={{maxHeight:180}}>
-                  {slot.html ? (
-                    <div dangerouslySetInnerHTML={{ __html: slot.html }} />
-                  ) : (
-                    (slot.lines || []).map((l,idx)=> <div key={idx} className="mb-1">• {l}</div>)
-                  )}
-                </div>
-                {slot.lines && <div className="text-xs mt-1 opacity-70">Group size: {slot.groupSize || 1}</div>}
-              </>
-            )}
           </div>
-        ))}
-      </div>
-      <p className="text-xs text-gray-500">Tip: Bible/Hymn selections and Workspace previews fill the first empty slot.</p>
+          <div className="p-2 text-xs space-y-1">
+            {group.length === 0 && <div className="text-gray-400">Empty</div>}
+            {group.map((l, j) => (
+              <div key={j} className="truncate" dangerouslySetInnerHTML={{ __html: l }} />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
