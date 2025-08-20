@@ -1,70 +1,65 @@
-'use client'
+// pages/index.tsx
 import dynamic from 'next/dynamic'
-import { useState } from 'react'
-import Workspace from '../components/Workspace'
-import HymnDisplay from '../components/HymnDisplay'
-import BibleDisplay from '../components/BibleDisplay'
-import QueuePanel from '../components/QueuePanel'
-import ThemeSettings from '../components/ThemeSettings'
-import PreviewBoard from '../components/PreviewBoard'
+import React from 'react'
+
+// Lazy-load all operator tools to prevent SSR evaluation problems
+const Workspace     = dynamic(() => import('../components/Workspace'),     { ssr: false })
+const HymnDisplay   = dynamic(() => import('../components/HymnDisplay'),   { ssr: false })
+const BibleDisplay  = dynamic(() => import('../components/BibleDisplay'),  { ssr: false })
+const QueuePanel    = dynamic(() => import('../components/QueuePanel'),    { ssr: false })
+const ThemeSettings = dynamic(() => import('../components/ThemeSettings'), { ssr: false })
+const PreviewBoard  = dynamic(() => import('../components/PreviewBoard'),  { ssr: false })
 
 function OperatorPage() {
-  const [tab, setTab] = useState<'workspace'|'hymns'|'bible'|'queue'|'theme'>('workspace')
-
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="p-3 border-b bg-white flex items-center gap-2">
-        <button onClick={()=>setTab('hymns')} className="px-2 py-1 border rounded">Hymns</button>
-        <button onClick={()=>setTab('bible')} className="px-2 py-1 border rounded">Bible</button>
-        <button onClick={()=>setTab('workspace')} className="px-2 py-1 border rounded">Workspace</button>
-        <button onClick={()=>setTab('queue')} className="px-2 py-1 border rounded">Queue</button>
-        <button onClick={()=>setTab('theme')} className="px-2 py-1 border rounded">Theme</button>
+    <div className="p-4 grid gap-4 md:grid-cols-2">
+      <div className="space-y-4">
+        <nav className="flex gap-3 text-sm">
+          <a href="#workspace">Workspace</a>
+          <a href="#hymns">Hymns</a>
+          <a href="#bible">Bible</a>
+          <a href="#queue">Queue</a>
+          <a href="#theme">Theme</a>
+        </nav>
+
+        <section id="workspace" className="bg-white rounded shadow p-3">
+          <h3 className="font-semibold mb-2">Workspace</h3>
+          <Workspace />
+        </section>
+
+        <section id="hymns" className="bg-white rounded shadow p-3">
+          <h3 className="font-semibold mb-2">Hymns</h3>
+          <HymnDisplay />
+        </section>
+
+        <section id="bible" className="bg-white rounded shadow p-3">
+          <h3 className="font-semibold mb-2">Bible</h3>
+          <BibleDisplay />
+        </section>
       </div>
 
-      <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* LEFT: active tool */}
-        <div className="space-y-3">
-          {tab === 'workspace' && (
-            <div className="bg-white rounded shadow p-3">
-              <h3 className="font-semibold mb-2">Workspace</h3>
-              <Workspace />
-            </div>
-          )}
-          {tab === 'hymns' && (
-            <div className="bg-white rounded shadow p-3">
-              <HymnDisplay />
-            </div>
-          )}
-          {tab === 'bible' && (
-            <div className="bg-white rounded shadow p-3">
-              <BibleDisplay />
-            </div>
-          )}
-          {tab === 'queue' && (
-            <div className="bg-white rounded shadow p-3">
-              <QueuePanel />
-            </div>
-          )}
-          {tab === 'theme' && (
-            <div className="bg-white rounded shadow p-3">
-              <h3 className="font-semibold mb-2">Theme & Presentation</h3>
-              <ThemeSettings />
-            </div>
-          )}
-        </div>
+      <div className="space-y-4">
+        <section id="queue" className="bg-white rounded shadow p-3">
+          <h3 className="font-semibold mb-2">Queue</h3>
+          <QueuePanel />
+        </section>
 
-        {/* RIGHT: 4-slot preview board */}
-        <div className="bg-white rounded shadow p-3">
+        <section className="bg-white rounded shadow p-3">
           <h3 className="font-semibold mb-2">Preview</h3>
           <PreviewBoard />
           <p className="text-xs text-gray-500 mt-2">
-            Queue / Hymns / Bible / Workspace send items here first. Click “Go Live” on a tile when ready.
+            This preview matches the current Theme settings. Use “Send to Live”.
           </p>
-        </div>
+        </section>
+
+        <section id="theme" className="bg-white rounded shadow p-3">
+          <h3 className="font-semibold mb-2">Theme</h3>
+          <ThemeSettings />
+        </section>
       </div>
     </div>
   )
 }
 
-// Turn off SSR for this page to avoid server-time runtime issues
+// Export page itself as client-only too
 export default dynamic(() => Promise.resolve(OperatorPage), { ssr: false })

@@ -1,74 +1,56 @@
+// pages/remote.tsx
 import dynamic from 'next/dynamic'
-import { useEffect, useState } from 'react'
-import { auth, onAuthStateChanged } from '../utils/firebase'
-import { db, dbRef, set, onValue, get, update } from '../utils/firebase'
-
-type Item = { id:string; title:string; content:string[]; kind:string }
+import React, { useEffect, useState } from 'react'
+import { db, dbRef, set, onValue } from '../utils/firebase'
 
 function RemotePage() {
-  const [user, setUser] = useState<any>(null)
-  const [queue, setQueue] = useState<Item[]>([])
-  const [current, setCurrent] = useState<number>(-1)
+  const [preview, setPreview] = useState<string[][]>([])
+  const [slot, setSlot] = useState(0)
 
   useEffect(() => {
-    const u = onAuthStateChanged(auth, (u) => setUser(u ?? null))
+    const u = onValue(dbRef(db, 'preview_board'), s => {
+      setPreview((s.val() as string[][]) || [])
+    })
     return () => u()
   }, [])
 
-  useEffect(() => {
-    const u1 = onValue(dbRef(db, 'queue'), snap => setQueue(snap.val() || []))
-    const u2 = onValue(dbRef(db, 'queue_current'), snap => setCurrent(snap.val() ?? -1))
-    return () => { u1(); u2() }
-  }, [])
-
-  if (!user) return (
-    <div style={{padding:24}}>
-      <h3>Sign in required</h3>
-      <a href="/login" style={{color:'#2563eb',textDecoration:'underline'}}>Go to Login</a>
-    </div>
-  )
-
-  const goLive = async (idx:number) => {
-    const item = queue[idx]; if (!item) return
-    await set(dbRef(db, 'live_content'), item.content)
-    await set(dbRef(db, 'live_state'), { mode: 'content' })
-    await set(dbRef(db, 'queue_current'), idx)
+  const goLive = async (i: number) => {
+    const group = preview[i] || []
+    await set(dbRef(db, 'live_content'), group)
+    await set(dbRef(db, 'live_mode'), 'content')
   }
-  const next = () => goLive(current + 1)
-  const prev = () => goLive(current - 1)
-  const black = () => set(dbRef(db, 'live_state'), { mode: 'black' })
-  const clear = () => set(dbRef(db, 'live_state'), { mode: 'clear' })
+  const clear = async () => set(dbRef(db, 'live_mode'), 'clear')
+  const black = async () => set(dbRef(db, 'live_mode'), 'black')
 
   return (
-    <div style={{padding:16}}>
-      <h2 style={{marginBottom:12}}>Remote</h2>
-      <div style={{display:'flex',gap:8,marginBottom:12}}>
-        <button onClick={prev} style={{padding:12,flex:1}}>◀ Prev</button>
-        <button onClick={next} style={{padding:12,flex:1}}>Next ▶</button>
+    <div className="p-4 space-y-4">
+      <div className="flex gap-2">
+        <button onClick={black} className="px-3 py-1 rounded bg-black text-white">Black</button>
+        <button onClick={clear} className="px-3 py-1 rounded bg-gray-200">Clear</button>
       </div>
-      <div style={{display:'flex',gap:8,marginBottom:16}}>
-        <button onClick={black} style={{padding:12,flex:1,background:'#000',color:'#fff'}}>Black</button>
-        <button onClick={clear} style={{padding:12,flex:1}}>Clear</button>
-      </div>
-      <div>
-        {queue.map((q, i) => (
-          <button key={q.id}
-                  onClick={() => goLive(i)}
-                  style={{
-                    display:'block', width:'100%', textAlign:'left',
-                    padding:10, marginBottom:8,
-                    border:'1px solid #ddd', borderRadius:8,
-                    background: i===current ? '#e0e7ff' : '#fff'
-                  }}>
-            <div style={{fontSize:12, textTransform:'uppercase', color:'#6b7280'}}>{q.kind}</div>
-            <div style={{fontWeight:600}}>{q.title}</div>
-          </button>
+
+      <div className="grid md:grid-cols-2 gap-3">
+        {preview.map((group, i) => (
+          <div key={i} className={`rounded border p-3 ${i === slot ? 'border-blue-500' : 'border-gray-300'}`}>
+            <div className="flex justify-between items-center mb-2">
+              <div className="text-sm font-semibold">Slot {i + 1}</div>
+              <div className="space-x-2">
+                <button className="text-xs px-2 py-1 bg-sky-600 text-white rounded" onClick={() => setSlot(i)}>
+                  Preview
+                </button>
+                <button className="text-xs px-2 py-1 bg-emerald-600 text-white rounded" onClick={() => goLive(i)}>
+                  Go Live
+                </button>
+              </div>
+            </div>
+            <ul className="text-xs">
+              {group.map((l, j) => <li key={j}>{l}</li>)}
+            </ul>
+          </div>
         ))}
-        {queue.length === 0 && <div style={{color:'#6b7280'}}>Queue is empty.</div>}
       </div>
     </div>
   )
 }
+
 export default dynamic(() => Promise.resolve(RemotePage), { ssr: false })
-
-
