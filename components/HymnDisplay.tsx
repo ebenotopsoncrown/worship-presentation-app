@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
 import { db, dbRef, set } from '../utils/firebase'
-import hymns from '../data/hymns.json' // or your MFM json payload
 
 type Slot = 1|2|3|4
 type Hymn = { id: string; title: string; verses: string[] }
+
+/** Supply your MFM hymn JSON at /data/hymns.json with {id,title,verses[]} */
+import hymnsData from '../data/hymns.json'
 
 export default function HymnDisplay(){
   const [q,setQ] = useState('')
@@ -11,25 +13,31 @@ export default function HymnDisplay(){
 
   const list = useMemo(() => {
     const s = q.trim().toLowerCase()
-    return (hymns as Hymn[]).filter(h => h.title.toLowerCase().includes(s)).slice(0,200)
+    const arr = (hymnsData as Hymn[]) || []
+    return s ? arr.filter(h => h.title.toLowerCase().includes(s)).slice(0,300) : arr.slice(0,300)
   },[q])
 
   const send = async (h:Hymn) => {
-    await set(dbRef(db,`preview_slots/${slot}`), {
+    await set(dbRef(db, `preview_slots/slot${slot}`), {
       id: `${h.id}-${Date.now()}`,
-      title: h.title,
-      lines: h.verses,            // preview shows paged lines
       kind: 'hymn',
-      groupSize: 2                // two verses per “page”
+      title: h.title,
+      lines: h.verses,
+      groupSize: 2
     })
   }
 
   return (
     <div>
-      <div className="row" style={{marginBottom:8}}>
-        <input className="input" placeholder="Search hymns…" value={q} onChange={e=>setQ(e.target.value)} />
-        <span className="muted">Send to</span>
-        <select value={slot} onChange={e=>setSlot(Number(e.target.value) as Slot)}>
+      <div style={{display:'flex', gap:8, marginBottom:8, alignItems:'center'}}>
+        <input
+          placeholder="Search hymns…"
+          onChange={e=>setQ(e.target.value)}
+          style={{flex:1, padding:'8px 10px', borderRadius:8, border:'1px solid rgba(255,255,255,.15)', background:'rgba(255,255,255,.08)', color:'#e5e7eb'}}
+        />
+        <span style={{opacity:.7}}>Send to</span>
+        <select value={slot} onChange={e=>setSlot(Number(e.target.value) as Slot)}
+          style={{padding:'6px 10px', borderRadius:8, background:'rgba(255,255,255,.08)', color:'#e5e7eb', border:'1px solid rgba(255,255,255,.15)'}}>
           <option value={1}>Preview 1</option>
           <option value={2}>Preview 2</option>
           <option value={3}>Preview 3</option>
@@ -37,15 +45,17 @@ export default function HymnDisplay(){
         </select>
       </div>
 
-      <ul style={{listStyle:'none', margin:0, padding:0, maxHeight:280, overflow:'auto'}}>
-        {list.map(h => (
-          <li key={h.id} className="row" style={{justifyContent:'space-between', padding:'6px 4px'}}>
+      <div style={{maxHeight:280, overflow:'auto'}}>
+        {(list as Hymn[]).map(h => (
+          <div key={h.id} style={{display:'flex', justifyContent:'space-between', padding:'6px 4px', borderBottom:'1px solid rgba(255,255,255,.06)'}}>
             <div>{h.title}</div>
-            <button className="primary" onClick={()=>send(h)}>Send to Preview</button>
-          </li>
+            <button onClick={()=>send(h)}
+              style={{padding:'6px 10px', borderRadius:8, background:'rgba(255,255,255,.08)', color:'#e5e7eb', border:'1px solid rgba(255,255,255,.12)'}}>
+              Send to Preview
+            </button>
+          </div>
         ))}
-      </ul>
+      </div>
     </div>
   )
 }
-
