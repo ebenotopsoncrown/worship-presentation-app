@@ -1,28 +1,15 @@
 // utils/firebase.ts
 import { initializeApp, getApps, type FirebaseOptions } from 'firebase/app'
-import {
-  getDatabase,
-  ref as _ref,
-  set,
-  onValue,
-  get,
-  update,
-} from 'firebase/database'
-import {
-  getAuth,
-  signInWithEmailAndPassword,
-  onAuthStateChanged,
-  signOut,
-  sendPasswordResetEmail,
-} from 'firebase/auth'
+import { getDatabase, ref as _ref, set, onValue, get, update } from 'firebase/database'
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from 'firebase/auth'
 
 const cfg: FirebaseOptions = {
-  apiKey: AIzaSyAqbORGv22jFVblz05CtrXffZSKKwYeWys,
-  authDomain: worship-presentation.firebaseapp.com,
-  databaseURL: https://worship-presentation-default-rtdb.europe-west1.firebasedatabase.app, // optional is fine
-  projectId: worship-presentation,
-  storageBucket: worship-presentation.appspot.com,
-  messagingSenderId: 282827808544,
+  apiKey: process.env.AIzaSyAqbORGv22jFVblz05CtrXffZSKKwYeWys,
+  authDomain: process.env.worship-presentation.firebaseapp.com,
+  databaseURL: process.env.https://worship-presentation-default-rtdb.europe-west1.firebasedatabase.app, // optional but recommended
+  projectId: process.env.worship-presentation!,
+  storageBucket: process.env.worship-presentation.appspot.com,
+  messagingSenderId: process.env.282827808544,
   appId: 1:282827808544:web:056ad57a65bd003a2bc145,
 }
 
@@ -37,4 +24,6 @@ export { set, onValue, get, update }
 
 // Auth helpers
 export { signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail }
-export { _ref as ref }   
+
+// Compatibility export for any files that still use `{ ref }`
+export { _ref as ref }
