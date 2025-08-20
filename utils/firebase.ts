@@ -17,13 +17,13 @@ import {
 } from 'firebase/auth'
 
 const cfg: FirebaseOptions = {
-  apiKey: AIzaSyAqbORGv22jFVblz05CtrXffZSKKwYeWys,
-  authDomain: worship-presentation.firebaseapp.com,
-  databaseURL: https://worship-presentation-default-rtdb.europe-west1.firebasedatabase.app, // optional is fine
-  projectId: worship-presentation,
-  storageBucket: worship-presentation.appspot.com,
-  messagingSenderId: 282827808544,
-  appId: 1:282827808544:web:056ad57a65bd003a2bc145,
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
+  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL, // optional but recommended
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
 }
 
 const app = getApps().length ? getApps()[0] : initializeApp(cfg)
@@ -35,5 +35,5 @@ export const auth = getAuth(app)
 export const dbRef = _ref
 export { set, onValue, get, update }
 
-// Auth helpers (so you can import from here)
+// Auth helpers
 export { signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail }
