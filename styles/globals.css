@@ -1,6 +1,132 @@
-/* styles/globals.css */
-html, body, #__next { height: 100%; }
-.presentation-gradient {
-  background: radial-gradient(1200px 600px at 50% -20%, #1f2937 0%, #0b1324 60%, #000 100%);
+/* ---- Base ---- */
+:root{
+  --wine: #823056;          /* light wine */
+  --royal: #2d3e9e;         /* royal blue */
+  --bg1: rgba(130,48,86,.14);
+  --bg2: rgba(45,62,158,.14);
+  --card: #ffffff;
+  --ink: #111827;
+  --muted: #6b7280;
+  --accent: #334155;
+  --ring: rgba(45,62,158,.35);
 }
- 
+
+html, body {
+  height: 100%;
+  margin: 0;
+  color: var(--ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  background:
+    radial-gradient(1200px 800px at -10% -10%, var(--bg1), transparent 60%),
+    radial-gradient(900px 700px at 110% 0%, var(--bg2), transparent 55%),
+    radial-gradient(1000px 900px at 50% 120%, var(--bg1), transparent 50%),
+    linear-gradient(135deg, #f8fafc, #eef2ff);
+}
+
+/* ---- Layout (top row) ---- */
+.op-grid{
+  display:grid;
+  grid-template-columns: 1fr 2fr 2.2fr; /* preview ~200%, live larger */
+  gap: 16px;
+  align-items:start;
+  padding: 16px;
+}
+
+.pane{
+  background: var(--card);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(51,65,85,.12);
+  border: 1px solid rgba(2,6,23,.06);
+  overflow: hidden;
+}
+
+.pane header{
+  display:flex; align-items:center; justify-content:space-between;
+  padding: 10px 14px;
+  background: linear-gradient( to right, rgba(130,48,86,.06), rgba(45,62,158,.06) );
+  border-bottom: 1px solid rgba(2,6,23,.06);
+  font-weight: 600; letter-spacing:.2px;
+}
+
+/* ---- Workspace editor area ---- */
+.editor{
+  padding: 12px 14px 16px 14px;
+}
+
+/* toolbar buttons you already have keep working */
+
+/* ---- Preview Grid (x2 size) ---- */
+.preview-grid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 12px;
+}
+
+.preview-cell{
+  position:relative;
+  border:1px dashed rgba(2,6,23,.15);
+  border-radius:10px;
+  min-height: 320px; /* was ~160px -> doubled */
+  background: conic-gradient(from 180deg, rgba(45,62,158,.05), rgba(130,48,86,.05));
+  overflow:hidden;
+}
+
+.preview-cell .toolbar{
+  position:absolute; inset:auto 8px 8px 8px;
+  display:flex; gap:8px; justify-content:flex-end;
+}
+
+.preview-cell .frame{
+  padding:14px; height:100%; overflow:auto;
+}
+
+/* ---- Live preview (right pane) ---- */
+.live-preview{
+  padding: 12px;
+}
+.live-frame{
+  height: 660px;          /* increased */
+  border-radius: 10px;
+  background: #0b1220;
+  background-image: radial-gradient(900px 700px at -10% 10%, rgba(130,48,86,.20), transparent 50%),
+                    radial-gradient(900px 700px at 110% 0%, rgba(45,62,158,.25), transparent 55%);
+  color:#fff;
+  padding: 18px;
+  overflow:auto;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+}
+
+/* ---- Bottom row (Hymns/Bible/Slides) ---- */
+.bottom-grid{
+  display:grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap:16px;
+  padding: 0 16px 24px 16px;
+}
+
+.section{
+  background: var(--card);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(51,65,85,.12);
+  border: 1px solid rgba(2,6,23,.06);
+  overflow:hidden;
+}
+
+.section header{
+  padding:10px 14px;
+  font-weight:600;
+  border-bottom:1px solid rgba(2,6,23,.06);
+  background: linear-gradient( to right, rgba(130,48,86,.06), rgba(45,62,158,.06) );
+}
+
+.section .body{ padding:12px; }
+
+/* small helpers */
+.row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.input, select, button{ border-radius:8px; padding:8px 10px; border:1px solid rgba(2,6,23,.12); }
+button{ background:#fff; cursor:pointer; }
+button.primary{ background: linear-gradient(90deg, #823056, #2d3e9e); color:#fff; border: none; }
+button.ghost{ background:rgba(255,255,255,.85); }
+select:focus, input:focus, button:focus{ outline:none; box-shadow: 0 0 0 3px var(--ring); }
+.muted{ color:var(--muted); font-size:.9rem; }
