@@ -1,61 +1,86 @@
-import { useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
+import hymnsData from '../data/mfm_hymns.json'
 import { db, dbRef, set } from '../utils/firebase'
 
-type Slot = 1|2|3|4
-type Hymn = { id: string; title: string; verses: string[] }
+type Hymn = {
+  id: string
+  number: number
+  title: string
+  firstLine: string
+  verses: string[][]
+  chorus?: string[]
+  searchTokens: string[]
+}
+const HYMNS = (hymnsData as any).hymns as Hymn[]
 
-/** Supply your MFM hymn JSON at /data/hymns.json with {id,title,verses[]} */
-import hymnsData from '../data/hymns.json'
+export default function HymnDisplay() {
+  const [q, setQ] = useState('')
+  const [slot, setSlot] = useState(1)
 
-export default function HymnDisplay(){
-  const [q,setQ] = useState('')
-  const [slot,setSlot] = useState<Slot>(1)
-
-  const list = useMemo(() => {
+  const results = useMemo(() => {
     const s = q.trim().toLowerCase()
-    const arr = (hymnsData as Hymn[]) || []
-    return s ? arr.filter(h => h.title.toLowerCase().includes(s)).slice(0,300) : arr.slice(0,300)
-  },[q])
+    if (!s) return HYMNS.slice(0, 30)
+    // number search
+    if (/^\d+$/.test(s)) {
+      return HYMNS.filter(h => String(h.number).startsWith(s)).slice(0, 50)
+    }
+    // token match
+    return HYMNS.filter(h =>
+      h.title.toLowerCase().includes(s) ||
+      h.firstLine.toLowerCase().includes(s) ||
+      h.searchTokens.some(t => t.startsWith(s))
+    ).slice(0, 50)
+  }, [q])
 
-  const send = async (h:Hymn) => {
+  function renderPreviewHtml(h: Hymn) {
+    const blocks = [
+      `<h2 style="margin:0 0 .25em 0">${h.title}</h2>`,
+      ...h.verses.map(v => `<p>${v.map(l => escapeHtml(l)).join('<br/>')}</p>`),
+      ...(h.chorus ? [`<p><em>${h.chorus.map(l => escapeHtml(l)).join('<br/>')}</em></p>`] : [])
+    ]
+    return blocks.join('')
+  }
+
+  async function send(h: Hymn) {
+    const html = renderPreviewHtml(h)
     await set(dbRef(db, `preview_slots/slot${slot}`), {
-      id: `${h.id}-${Date.now()}`,
+      id: String(Date.now()),
       kind: 'hymn',
-      title: h.title,
-      lines: h.verses,
-      groupSize: 2
+      title: `${h.number}. ${h.title}`,
+      html
     })
   }
 
   return (
-    <div>
-      <div style={{display:'flex', gap:8, marginBottom:8, alignItems:'center'}}>
+    <div className="panel" style={{marginTop:16}}>
+      <div className="panel-title">Hymns</div>
+
+      <div style={{display:'flex', gap:8, marginBottom:10}}>
         <input
-          placeholder="Search hymns…"
-          onChange={e=>setQ(e.target.value)}
-          style={{flex:1, padding:'8px 10px', borderRadius:8, border:'1px solid rgba(255,255,255,.15)', background:'rgba(255,255,255,.08)', color:'#e5e7eb'}}
+          placeholder="Search by number, title, or first line…"
+          value={q} onChange={e=>setQ(e.target.value)}
+          style={{flex:1, padding:'8px 10px', borderRadius:8, border:'1px solid rgba(255,255,255,.12)', background:'rgba(0,0,0,.25)', color:'inherit'}}
         />
-        <span style={{opacity:.7}}>Send to</span>
-        <select value={slot} onChange={e=>setSlot(Number(e.target.value) as Slot)}
-          style={{padding:'6px 10px', borderRadius:8, background:'rgba(255,255,255,.08)', color:'#e5e7eb', border:'1px solid rgba(255,255,255,.15)'}}>
-          <option value={1}>Preview 1</option>
-          <option value={2}>Preview 2</option>
-          <option value={3}>Preview 3</option>
-          <option value={4}>Preview 4</option>
+        <select value={slot} onChange={e=>setSlot(Number(e.target.value))}>
+          {[1,2,3,4].map(n => <option key={n} value={n}>Preview {n}</option>)}
         </select>
       </div>
 
-      <div style={{maxHeight:280, overflow:'auto'}}>
-        {(list as Hymn[]).map(h => (
-          <div key={h.id} style={{display:'flex', justifyContent:'space-between', padding:'6px 4px', borderBottom:'1px solid rgba(255,255,255,.06)'}}>
-            <div>{h.title}</div>
-            <button onClick={()=>send(h)}
-              style={{padding:'6px 10px', borderRadius:8, background:'rgba(255,255,255,.08)', color:'#e5e7eb', border:'1px solid rgba(255,255,255,.12)'}}>
-              Send to Preview
-            </button>
-          </div>
+      <ul style={{listStyle:'none', padding:0, margin:0, display:'grid', gap:8}}>
+        {results.map(h => (
+          <li key={h.id} style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'8px 10px', border:'1px solid rgba(255,255,255,.08)', borderRadius:8, background:'rgba(0,0,0,.25)'}}>
+            <div>
+              <div style={{fontWeight:600}}>{h.number}. {h.title}</div>
+              <div style={{opacity:.65, fontSize:'.9rem'}}>{h.firstLine}</div>
+            </div>
+            <button onClick={() => send(h)} style={{padding:'6px 10px'}}>Send to Preview</button>
+          </li>
         ))}
-      </div>
+      </ul>
     </div>
   )
+}
+
+function escapeHtml(s: string) {
+  return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]!))
 }
