@@ -1,4 +1,5 @@
 'use client'
+import dynamic from 'next/dynamic'
 import { useState } from 'react'
 import Workspace from '../components/Workspace'
 import HymnDisplay from '../components/HymnDisplay'
@@ -7,7 +8,7 @@ import QueuePanel from '../components/QueuePanel'
 import ThemeSettings from '../components/ThemeSettings'
 import PreviewBoard from '../components/PreviewBoard'
 
-export default function IndexPage() {
+function OperatorPage() {
   const [tab, setTab] = useState<'workspace'|'hymns'|'bible'|'queue'|'theme'>('workspace')
 
   return (
@@ -29,25 +30,21 @@ export default function IndexPage() {
               <Workspace />
             </div>
           )}
-
           {tab === 'hymns' && (
             <div className="bg-white rounded shadow p-3">
               <HymnDisplay />
             </div>
           )}
-
           {tab === 'bible' && (
             <div className="bg-white rounded shadow p-3">
               <BibleDisplay />
             </div>
           )}
-
           {tab === 'queue' && (
             <div className="bg-white rounded shadow p-3">
               <QueuePanel />
             </div>
           )}
-
           {tab === 'theme' && (
             <div className="bg-white rounded shadow p-3">
               <h3 className="font-semibold mb-2">Theme & Presentation</h3>
@@ -61,10 +58,13 @@ export default function IndexPage() {
           <h3 className="font-semibold mb-2">Preview</h3>
           <PreviewBoard />
           <p className="text-xs text-gray-500 mt-2">
-            Queue/Hymns/Bible/Workspace send items here first. Click “Go Live” on a tile when ready.
+            Queue / Hymns / Bible / Workspace send items here first. Click “Go Live” on a tile when ready.
           </p>
         </div>
       </div>
     </div>
   )
 }
+
+// Turn off SSR for this page to avoid server-time runtime issues
+export default dynamic(() => Promise.resolve(OperatorPage), { ssr: false })

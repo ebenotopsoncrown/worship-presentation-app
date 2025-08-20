@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { auth, onAuthStateChanged } from '../utils/firebase'
-import { db, ref as dbRef, onValue, set } from '../utils/firebase'
+import { db, dbRef, set, onValue, get, update } from '../utils/firebase'
 
 type Item = { id:string; title:string; content:string[]; kind:string }
 
@@ -68,3 +68,6 @@ export default function Remote() {
     </div>
   )
 }
+
+export { _ref as ref }   // <- optional compatibility export
+
