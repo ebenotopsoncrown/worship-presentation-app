@@ -1,3 +1,4 @@
+'use client'
 import dynamic from 'next/dynamic';
 import React, { useEffect, useRef, useState } from 'react'
 import { db, dbRef, onValue, set } from '../utils/firebase'
