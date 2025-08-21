@@ -3,6 +3,7 @@ import { db, dbRef, onValue, set } from '../utils/firebase'
 import HymnDisplay from '../components/HymnDisplay'
 import BibleDisplay from '../components/BibleDisplay'
 import SlidesMini from '../components/SlidesMini'
+import dynamic from 'next/dynamic';
 
 type SlotData = {
   id: string
@@ -127,6 +128,8 @@ export default function Operator() {
       html
     })
   }
+
+  export default dynamic(() => Promise.resolve(Operator), { ssr: false });
 
   return (
     <>
