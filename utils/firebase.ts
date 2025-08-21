@@ -38,6 +38,21 @@ export const auth = getAuth(app)
 export const dbRef = _ref
 export { set, onValue, get, update }
 
+// Write to a preview slot and surface errors in console/UI
+export async function setPreviewSlot(
+  slot: number,
+  payload: { id: string; kind: 'workspace'|'hymn'|'bible'; title?: string; html?: string; lines?: string[] }
+) {
+  const path = `preview_slots/slot${slot}`;
+  try {
+    await set(dbRef(db, path), payload);
+  } catch (err) {
+    console.error('setPreviewSlot failed:', path, err);
+    throw err; // let the caller show a message if desired
+  }
+}
+
+
 // ---- Auth helpers ----
 export {
   signInWithEmailAndPassword,
