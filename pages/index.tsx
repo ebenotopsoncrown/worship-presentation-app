@@ -1,9 +1,10 @@
+import dynamic from 'next/dynamic';
 import React, { useEffect, useRef, useState } from 'react'
 import { db, dbRef, onValue, set } from '../utils/firebase'
 import HymnDisplay from '../components/HymnDisplay'
 import BibleDisplay from '../components/BibleDisplay'
 import SlidesMini from '../components/SlidesMini'
-import dynamic from 'next/dynamic';
+
 
 type SlotData = {
   id: string
@@ -111,7 +112,7 @@ function PreviewGrid() {
 }
 
 /** ---------- Page ---------- */
-export default function Operator() {
+function Operator() {
   const editorRef = useRef<HTMLDivElement>(null)
   const titleRef  = useRef<HTMLInputElement>(null)
   const [slot, setSlot] = useState(1)
@@ -129,9 +130,7 @@ export default function Operator() {
     })
   }
 
-  export default dynamic(() => Promise.resolve(Operator), { ssr: false });
-
-  return (
+   return (
     <>
       {/* ---- THE LAYOUT: Workspace | Preview | Live --- */}
       <div className="layout">
@@ -294,3 +293,5 @@ export default function Operator() {
     </>
   )
 }
+ export default dynamic(() => Promise.resolve(Operator), { ssr: false });
+
