@@ -12,12 +12,16 @@ type Hymn = {
   searchTokens?: string[];
 };
 
+declare global {
+  interface Window {
+    mammoth?: any;
+    pdfjsLib?: any;
+  }
+}
+
 const asArr = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 const asStr = (v: unknown): string => (typeof v === 'string' ? v : '');
-
-function slug(s: string) {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-}
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
 function parseHymnFromText(title: string, raw: string): Hymn {
   const blocks = String(raw).replace(/\r/g, '').trim().split(/\n{2,}/); // blank line separates stanzas
@@ -25,11 +29,11 @@ function parseHymnFromText(title: string, raw: string): Hymn {
   let chorus: string[] | undefined;
 
   for (const b of blocks) {
-    const lines = b.split('\n').map(l => l.trim()).filter(Boolean);
+    const lines = b.split('\n').map((l) => l.trim()).filter(Boolean);
     if (!lines.length) continue;
     const isChorus = /^chorus[:\-]?/i.test(lines[0]) || /^refrain[:\-]?/i.test(lines[0]);
     if (isChorus) {
-      const rest = lines.slice(1).length ? lines.slice(1) : lines; // if they wrote "Chorus:" on its own line
+      const rest = lines.slice(1).length ? lines.slice(1) : lines;
       chorus = rest;
     } else {
       verses.push(lines);
@@ -37,30 +41,78 @@ function parseHymnFromText(title: string, raw: string): Hymn {
   }
 
   const firstLine = verses[0]?.[0] || chorus?.[0] || title;
-  const id = `${slug(title)}-${Date.now()}`;
   return {
-    id,
+    id: `${slug(title)}-${Date.now()}`,
     title,
     firstLine,
     verses,
     chorus,
-    searchTokens: [title, firstLine].filter(Boolean).map(s => s.toLowerCase()),
+    searchTokens: [title, firstLine].filter(Boolean).map((s) => s.toLowerCase()),
   };
 }
 
+/** Load an external script exactly once */
+function loadScriptOnce(srcs: string[], globalKey: 'mammoth' | 'pdfjsLib'): Promise<any> {
+  return new Promise(async (resolve, reject) => {
+    // already loaded?
+    if ((window as any)[globalKey]) return resolve((window as any)[globalKey]);
+
+    const trySrc = async (src: string) =>
+      new Promise<void>((res, rej) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.async = true;
+        s.crossOrigin = 'anonymous';
+        s.onload = () => res();
+        s.onerror = () => rej(new Error(`Failed to load ${src}`));
+        document.head.appendChild(s);
+      });
+
+    for (const src of srcs) {
+      try {
+        await trySrc(src);
+        if ((window as any)[globalKey]) return resolve((window as any)[globalKey]);
+      } catch {
+        // try next cdn
+      }
+    }
+    reject(new Error(`Could not load ${globalKey} from any CDN`));
+  });
+}
+
 async function extractTextFromDocx(file: File): Promise<string> {
-  // mammoth provides a browser build
-  const mammoth: any = (await import('mammoth/mammoth.browser')).default || await import('mammoth/mammoth.browser');
+  // Load mammoth at runtime from a CDN (no compile-time dependency)
+  const mammoth: any = await loadScriptOnce(
+    [
+      'https://unpkg.com/mammoth@1.6.0/mammoth.browser.min.js',
+      'https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js',
+      'https://unpkg.com/mammoth@1.6.0/mammoth.browser.js'
+    ],
+    'mammoth'
+  ).catch(() => null);
+
+  if (!mammoth) throw new Error('mammoth-not-available');
+
   const ab = await file.arrayBuffer();
   const { value } = await mammoth.extractRawText({ arrayBuffer: ab });
   return String(value || '').trim();
 }
 
 async function extractTextFromPdf(file: File): Promise<string> {
-  const pdfjsLib: any = await import('pdfjs-dist/build/pdf');
-  // Set worker (use CDN worker to avoid bundling headaches)
-  const ver = pdfjsLib?.version || '3.11.174';
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${ver}/build/pdf.worker.min.js`;
+  // Load pdf.js from a CDN (no compile-time dependency)
+  const ver = '3.11.174';
+  const pdfjsLib: any = await loadScriptOnce(
+    [
+      `https://cdn.jsdelivr.net/npm/pdfjs-dist@${ver}/build/pdf.min.js`,
+      `https://unpkg.com/pdfjs-dist@${ver}/build/pdf.min.js`
+    ],
+    'pdfjsLib'
+  ).catch(() => null);
+
+  if (!pdfjsLib) throw new Error('pdfjs-not-available');
+
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    `https://cdn.jsdelivr.net/npm/pdfjs-dist@${ver}/build/pdf.worker.min.js`;
 
   const ab = await file.arrayBuffer();
   const loadingTask = pdfjsLib.getDocument({ data: ab });
@@ -78,13 +130,13 @@ async function extractTextFromPdf(file: File): Promise<string> {
 
 export default function HymnDisplay() {
   const [remote, setRemote] = useState<Hymn[]>([]);
-  const [local, setLocal] = useState<Hymn[]>([]); // fallback from JSON if present
+  const [local, setLocal] = useState<Hymn[]>([]); // optional JSON fallback
   const [q, setQ] = useState('');
   const [slot, setSlot] = useState<1 | 2 | 3 | 4>(1);
   const [selected, setSelected] = useState<Hymn | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Subscribe to RTDB library
+  // Subscribe to RTDB hymn library
   useEffect(() => {
     const ref = dbRef(db, 'hymn_library');
     const off = onValue(ref, (snap) => {
@@ -94,9 +146,9 @@ export default function HymnDisplay() {
       if (!selected && rows.length) setSelected(rows[0]);
     });
     return () => off();
-  }, []);
+  }, [selected]);
 
-  // Try to load bundled JSON as fallback (optional)
+  // Load optional bundled JSON as fallback (if present)
   useEffect(() => {
     (async () => {
       try {
@@ -104,22 +156,22 @@ export default function HymnDisplay() {
         const raw = mod?.default ?? mod;
         const list = (Array.isArray(raw) ? raw : asArr<Hymn>(raw?.hymns)).map((h: any) => ({
           ...h,
-          id: h.id || `${slug(h.title || 'hymn')}-${h.number ?? ''}-${Math.random().toString(36).slice(2,6)}`
+          id: h.id || `${slug(h.title || 'hymn')}-${h.number ?? ''}-${Math.random().toString(36).slice(2, 6)}`
         }));
         setLocal(list);
         if (!selected && !remote.length && list.length) setSelected(list[0]);
       } catch {
-        // ignore if file doesn't exist
+        // ignore if the file doesn't exist
       }
     })();
   }, [remote.length, selected]);
 
   const library = useMemo(() => {
-    // Prefer remote; include local fallback items not present remotely
-    const byKey = new Map<string, Hymn>();
-    for (const h of remote) byKey.set(h.id, h);
-    for (const h of local) if (!byKey.has(h.id)) byKey.set(h.id, h);
-    return Array.from(byKey.values());
+    // prefer remote; include local items that aren't in remote
+    const byId = new Map<string, Hymn>();
+    for (const h of remote) byId.set(h.id, h);
+    for (const h of local) if (!byId.has(h.id)) byId.set(h.id, h);
+    return Array.from(byId.values());
   }, [remote, local]);
 
   const results = useMemo(() => {
@@ -226,22 +278,30 @@ function AddHymnForm({ onSaved }: { onSaved: (h: Hymn) => void }) {
   const onFile = async (f: File) => {
     try {
       if (f.name.toLowerCase().endsWith('.docx')) {
-        const text = await extractTextFromDocx(f);
-        setRaw(text);
-        if (!title) setTitle(f.name.replace(/\.docx$/i,''));
+        try {
+          const text = await extractTextFromDocx(f);
+          setRaw(text);
+          if (!title) setTitle(f.name.replace(/\.docx$/i, ''));
+        } catch {
+          alert('DOCX support not available in this environment. Please open the file and paste the text here.');
+        }
       } else if (f.name.toLowerCase().endsWith('.pdf')) {
-        const text = await extractTextFromPdf(f);
-        setRaw(text);
-        if (!title) setTitle(f.name.replace(/\.pdf$/i,''));
+        try {
+          const text = await extractTextFromPdf(f);
+          setRaw(text);
+          if (!title) setTitle(f.name.replace(/\.pdf$/i, ''));
+        } catch {
+          alert('PDF support not available in this environment. Please copy the text and paste it here.');
+        }
       } else {
-        // plain text
+        // Plain text
         const txt = await f.text();
         setRaw(txt);
         if (!title) setTitle(f.name);
       }
     } catch (e) {
       console.error('Failed to import file', e);
-      alert('Could not read file. Try a different format or paste the text.');
+      alert('Could not read the file. Try a different format or paste the text.');
     }
   };
 
@@ -254,10 +314,8 @@ function AddHymnForm({ onSaved }: { onSaved: (h: Hymn) => void }) {
     try {
       const hymn = parseHymnFromText(title.trim(), raw.trim());
       if (number.trim() && /^\d+$/.test(number.trim())) hymn.number = Number(number.trim());
-      // store
       await update(dbRef(db, `hymn_library/${hymn.id}`), hymn);
       onSaved(hymn);
-      // reset
       setTitle(''); setNumber(''); setRaw('');
     } finally {
       setBusy(false);
@@ -292,5 +350,5 @@ function AddHymnForm({ onSaved }: { onSaved: (h: Hymn) => void }) {
 }
 
 function escapeHtml(s: string) {
-  return s.replace(/[&<>"]/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]!));
+  return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 }
