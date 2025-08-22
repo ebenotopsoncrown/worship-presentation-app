@@ -1,6 +1,7 @@
+'use client';
 import React, { useMemo, useState } from 'react';
 import hymnsData from '../data/mfm_hymns.json';
-import { db, dbRef, set } from '../utils/firebase';
+import { setPreviewSlot } from '../utils/firebase';
 
 type Hymn = {
   id: string;
@@ -8,11 +9,10 @@ type Hymn = {
   title: string;
   firstLine: string;
   verses: string[][];
-  chorus?: string[]; // guard at runtime anyway
+  chorus?: string[];
   searchTokens: string[];
 };
 
-// Safe helpers (avoid undefined pitfalls)
 const asArr = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 const asStr = (v: unknown): string => (typeof v === 'string' ? v : '');
 
@@ -25,16 +25,14 @@ export default function HymnDisplay() {
 
   const results = useMemo(() => {
     const s = q.trim().toLowerCase();
-    const base = HYMNS; // already safe array
+    const base = HYMNS;
 
     if (!s) return base.slice(0, 30);
 
-    // number search
     if (/^\d+$/.test(s)) {
       return base.filter((h) => String(h.number).startsWith(s)).slice(0, 50);
     }
 
-    // token match
     return base
       .filter((h) => {
         const title = asStr(h.title).toLowerCase();
@@ -53,36 +51,34 @@ export default function HymnDisplay() {
     const verses = asArr<string[]>(h.verses).map((v) => asArr<string>(v));
     const chorus = asArr<string>(h.chorus);
     const blocks: string[] = [];
-
     blocks.push(
       `<h2 style="margin:0 0 .25em 0">${escapeHtml(`${h.title}`)}</h2>`
     );
-
     verses.forEach((v) => {
       blocks.push(`<p>${v.map((l) => escapeHtml(l)).join('<br/>')}</p>`);
     });
-
     if (chorus.length) {
       blocks.push(
         `<p><em>${chorus.map((l) => escapeHtml(l)).join('<br/>')}</em></p>`
       );
     }
-
     return blocks.join('');
   }
 
-  import { setPreviewSlot } from '../utils/firebase';
-// ...
-async function send(h: Hymn) {
-  const html = renderPreviewHtml(h);
-  await setPreviewSlot(slot, {
-    id: String(Date.now()),
-    kind: 'hymn',
-    title: `${h.number}. ${h.title}`,
-    html
-  });
-}
-
+  async function send(h: Hymn) {
+    try {
+      setBusyId(h.id);
+      const html = renderPreviewHtml(h);
+      await setPreviewSlot(slot, {
+        id: String(Date.now()),
+        kind: 'hymn',
+        title: `${h.number}. ${h.title}`,
+        html,
+      });
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   return (
     <div className="panel" style={{ marginTop: 16 }}>
