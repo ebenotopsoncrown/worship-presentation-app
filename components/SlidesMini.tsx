@@ -9,22 +9,17 @@ export default function SlidesMini() {
   const [slot, setSlot] = useState<Slot>(1);
   const [busy, setBusy] = useState(false);
 
-  const send = async () => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      const safeTitle = typeof title === 'string' ? title : '';
-      const safeText = typeof text === 'string' ? text : '';
-      await set(dbRef(db, `preview_slots/slot${slot}`), {
-        id: `slides-${Date.now()}`,
-        kind: 'slides',
-        title: safeTitle,
-        html: `<div style="font-size:52px; line-height:1.22">${safeText.replace(/\n/g, '<br/>')}</div>`,
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
+  import { setPreviewSlot } from '../utils/firebase';
+// ...
+const send = async () => {
+  await setPreviewSlot(slot, {
+    id: `slides-${Date.now()}`,
+    kind: 'slides',
+    title,
+    html: `<div style="font-size:52px; line-height:1.22">${text.replace(/\n/g,'<br/>')}</div>`
+  });
+};
+
 
   return (
     <div>
@@ -91,3 +86,4 @@ export default function SlidesMini() {
     </div>
   );
 }
+
