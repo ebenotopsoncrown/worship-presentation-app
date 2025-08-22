@@ -1,92 +1,126 @@
-'use client';
-import { useMemo, useState } from 'react';
-import { db, dbRef, set } from '../utils/firebase';
+import React from 'react';
+import { setPreviewSlot } from '../utils/firebase';
 
-type Slot = 1 | 2 | 3 | 4;
-type Version = 'KJV' | 'NIV' | 'ESV';
+type Verse = { v: number; t: string };
 
-const asArr = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
-const asStr = (v: unknown): string => (typeof v === 'string' ? v : '');
+async function fetchVerses(ref: string, ver: string): Promise<{ ref: string; verses: Verse[] }> {
+  const res = await fetch(`/api/bible?ref=${encodeURIComponent(ref)}&ver=${encodeURIComponent(ver)}`);
+  if (!res.ok) throw new Error('Failed to load passage');
+  return res.json();
+}
+
+function versesToSlides(ref: string, verses: Verse[], per = 2) {
+  const mk = (html: string) => `<div style="font-size:2.6rem;line-height:1.2">${html}</div>`;
+  const slides: string[] = [];
+  for (let i = 0; i < verses.length; i += per) {
+    const group = verses.slice(i, i + per);
+    const head = `<div style="font-size:1rem;opacity:.7;margin-bottom:.25rem">${ref}</div>`;
+    const body = group
+      .map((v) => `<span style="opacity:.7;font-size:1rem">${v.v}</span> ${v.t}`)
+      .join('<br/>');
+    slides.push(mk(head + body));
+  }
+  return slides;
+}
 
 export default function BibleDisplay() {
-  const [ref, setRef] = useState('John 3:16-18');
-  const [ver, setVer] = useState<Version>('KJV');
-  const [slot, setSlot] = useState<Slot>(1);
-  const [busy, setBusy] = useState(false);
-  const [preview, setPreview] = useState<{ title: string; lines: string[] } | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [refTxt, setRefTxt] = React.useState('John 3:16-18');
+  const [ver, setVer] = React.useState<'KJV' | 'WEB'>('KJV');
+  const [slot, setSlot] = React.useState<number>(1);
+  const [loading, setLoading] = React.useState(false);
+  const [previewHtml, setPreviewHtml] = React.useState<string>('');
 
-  const fetchVerses = async (reference: string, version: Version) => {
+  const preview = async () => {
     try {
-      const q = encodeURIComponent(reference.trim());
-      const r = await fetch(`/api/bible?q=${q}&v=${version}`);
-      if (!r.ok) throw new Error('Bible API failed');
-      const json = (await r.json()) as { lines?: unknown; title?: unknown };
-      const title = asStr(json.title) || `${reference} (${version})`;
-      const lines = asArr<string>(json.lines);
-      return { title, lines: lines.length ? lines : [`[No verses returned] ${reference} (${version})`] };
-    } catch {
-      return { title: `${reference} (${version})`, lines: [`[Bible API not configured] ${reference} (${version})`] };
+      setLoading(true);
+      const data = await fetchVerses(refTxt, ver);
+      const slides = versesToSlides(data.ref, data.verses);
+      setPreviewHtml(slides[0] ?? '');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const loadPreview = async () => {
-    setLoading(true);
-    try { setPreview(await fetchVerses(ref, ver)); }
-    finally { setLoading(false); }
-  };
-
   const send = async () => {
-    if (busy) return;
-    setBusy(true);
     try {
-      const data = preview ?? await fetchVerses(ref, ver);
-      await set(dbRef(db, `preview_slots/slot${slot}`), {
-        id: `${Date.now()}-bible`,
-        kind: 'bible',
-        title: data.title,
-        lines: asArr<string>(data.lines),
-        groupSize: 2,
-      });
-    } finally { setBusy(false); }
+      setLoading(true);
+      const data = await fetchVerses(refTxt, ver);
+      const slides = versesToSlides(data.ref, data.verses);
+      if (slot === 1) {
+        await setPreviewSlot(1, {
+          kind: 'slides',
+          slides,
+          index: 0,
+          meta: { type: 'bible', ref: data.ref, ver },
+        });
+      } else {
+        // collapse slides to a single html payload separated by explicit slide markers (for future splitting, if desired)
+        const whole = slides.join('<!-- slide -->');
+        await setPreviewSlot(slot, { html: whole, meta: { type: 'bible', ref: data.ref, ver } });
+      }
+    } finally {
+      setLoading(false);
+    }
   };
-
-  const previewHtml = useMemo(() => {
-    if (!preview) return '<div style="opacity:.6">Click Preview to load the passage…</div>';
-    return `<h2 style="margin:0 0 .25em 0">${escapeHtml(preview.title)}</h2><p>${preview.lines.map(escapeHtml).join('<br/>')}</p>`;
-  }, [preview]);
 
   return (
-    <>
-      <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center', marginBottom:8 }}>
-        <input value={ref} onChange={(e) => setRef(e.target.value)} placeholder="e.g. John 3:16-18"
-          style={{ minWidth:220, flex:'1 1 220px', padding:'8px 10px', borderRadius:8, border:'1px solid rgba(255,255,255,.15)', background:'rgba(255,255,255,.08)', color:'#e5e7eb' }} />
-        <select value={ver} onChange={(e) => setVer(e.target.value as Version)}
-          style={{ padding:'6px 10px', borderRadius:8, background:'rgba(255,255,255,.08)', color:'#e5e7eb', border:'1px solid rgba(255,255,255,.15)' }}>
-          <option>KJV</option><option>NIV</option><option>ESV</option>
+    <div className="bg-zinc-900 rounded-2xl p-4 shadow-inner border border-zinc-800">
+      <div className="text-zinc-200 font-semibold mb-3">Bible</div>
+
+      <div className="flex items-center gap-2 mb-2">
+        <input
+          className="w-full bg-zinc-800 rounded px-3 py-2 outline-none"
+          placeholder="John 3:16-18"
+          value={refTxt}
+          onChange={(e) => setRefTxt(e.target.value)}
+        />
+        <select
+          className="bg-zinc-800 rounded px-2 py-2"
+          value={ver}
+          onChange={(e) => setVer(e.target.value as any)}
+        >
+          <option value="KJV">KJV</option>
+          <option value="WEB">WEB</option>
         </select>
-        <button onClick={loadPreview} disabled={loading}
-          style={{ padding:'6px 10px', borderRadius:8, background:'rgba(255,255,255,.08)', color:'#e5e7eb', border:'1px solid rgba(255,255,255,.12)', opacity: loading ? .6 : 1 }}>
-          {loading ? 'Loading…' : 'Preview'}
-        </button>
-        <span style={{ opacity:.7 }}>→</span>
-        <select value={slot} onChange={(e) => setSlot(Number(e.target.value) as Slot)}
-          style={{ padding:'6px 10px', borderRadius:8, background:'rgba(255,255,255,.08)', color:'#e5e7eb', border:'1px solid rgba(255,255,255,.15)' }}>
-          <option value={1}>Preview 1</option><option value={2}>Preview 2</option><option value={3}>Preview 3</option><option value={4}>Preview 4</option>
-        </select>
-        <button disabled={busy} onClick={send}
-          style={{ padding:'6px 10px', borderRadius:8, background:'rgba(255,255,255,.08)', color:'#e5e7eb', border:'1px solid rgba(255,255,255,.12)', opacity: busy ? .6 : 1 }}>
-          {busy ? 'Sending…' : 'Send to Preview'}
+        <button
+          onClick={preview}
+          className="px-3 py-2 rounded bg-zinc-800 hover:bg-zinc-700"
+          disabled={loading}
+        >
+          Preview
         </button>
       </div>
 
-      {/* Preview box inside Bible */}
-      <div style={{ minHeight:160, border:'1px solid rgba(255,255,255,.12)', borderRadius:10, padding:12, background:'rgba(0,0,0,.35)' }}
-           dangerouslySetInnerHTML={{ __html: previewHtml }} />
-    </>
-  );
-}
+      <div className="flex items-center gap-2 mb-3">
+        <select
+          className="bg-zinc-800 rounded px-2 py-2"
+          value={slot}
+          onChange={(e) => setSlot(parseInt(e.target.value, 10))}
+        >
+          <option value={1}>Preview 1</option>
+          <option value={2}>Preview 2</option>
+          <option value={3}>Preview 3</option>
+          <option value={4}>Preview 4</option>
+        </select>
+        <button
+          onClick={send}
+          className="px-3 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white disabled:bg-zinc-700"
+          disabled={loading}
+        >
+          Send to Preview
+        </button>
+      </div>
 
-function escapeHtml(s: string) {
-  return s.replace(/[&<>"]/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]!));
+      <div className="bg-black/40 rounded-xl min-h-[160px] h-[200px] overflow-auto p-3">
+        {previewHtml ? (
+          <div
+            className="text-2xl leading-tight"
+            dangerouslySetInnerHTML={{ __html: previewHtml }}
+          />
+        ) : (
+          <div className="text-zinc-500 text-sm">Click Preview to load the passage…</div>
+        )}
+      </div>
+    </div>
+  );
 }
