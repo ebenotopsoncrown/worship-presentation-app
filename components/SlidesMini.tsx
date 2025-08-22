@@ -1,5 +1,6 @@
+'use client';
 import { useState } from 'react';
-import { db, dbRef, set } from '../utils/firebase';
+import { setPreviewSlot } from '../utils/firebase';
 
 type Slot = 1 | 2 | 3 | 4;
 
@@ -9,17 +10,21 @@ export default function SlidesMini() {
   const [slot, setSlot] = useState<Slot>(1);
   const [busy, setBusy] = useState(false);
 
-  import { setPreviewSlot } from '../utils/firebase';
-// ...
-const send = async () => {
-  await setPreviewSlot(slot, {
-    id: `slides-${Date.now()}`,
-    kind: 'slides',
-    title,
-    html: `<div style="font-size:52px; line-height:1.22">${text.replace(/\n/g,'<br/>')}</div>`
-  });
-};
-
+  const send = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await setPreviewSlot(slot, {
+        id: `slides-${Date.now()}`,
+        kind: 'slides',
+        title: title ?? '',
+        html: `<div style="font-size:52px; line-height:1.22">${(text ?? '')
+          .replace(/\n/g, '<br/>')}</div>`,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div>
@@ -86,4 +91,3 @@ const send = async () => {
     </div>
   );
 }
-
