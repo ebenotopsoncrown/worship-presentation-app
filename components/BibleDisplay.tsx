@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { setPreviewSlot } from '../utils/firebase';
+import { db, dbRef, set } from '../utils/firebase';
 
 type Slot = 1 | 2 | 3 | 4;
 type Version = 'KJV' | 'NIV' | 'ESV';
@@ -22,15 +22,10 @@ export default function BibleDisplay() {
       const json = (await r.json()) as { lines?: unknown; title?: unknown };
       const title = asStr(json.title) || `${reference} (${version})`;
       const lines = asArr<string>(json.lines);
-      return {
-        title,
-        lines: lines.length ? lines : [`[No verses returned] ${reference} (${version})`],
-      };
+      return { title, lines: lines.length ? lines : [`[No verses returned] ${reference} (${version})`] };
     } catch {
-      return {
-        title: `${reference} (${version})`,
-        lines: [`[Bible API not configured] ${reference} (${version})`],
-      };
+      // Fallback if API route isn't implemented yet
+      return { title: `${reference} (${version})`, lines: [`[Bible API not configured] ${reference} (${version})`] };
     }
   };
 
@@ -39,11 +34,12 @@ export default function BibleDisplay() {
     setBusy(true);
     try {
       const data = await fetchVerses(ref, ver);
-      await setPreviewSlot(slot, {
+      await set(dbRef(db, `preview_slots/slot${slot}`), {
         id: `${Date.now()}-bible`,
         kind: 'bible',
         title: data.title,
         lines: asArr<string>(data.lines),
+        groupSize: 2,
       });
     } finally {
       setBusy(false);
