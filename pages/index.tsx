@@ -221,7 +221,7 @@ function Operator() {
         .cell-actions{display:flex; gap:8px; margin-top:8px}
         .cell-actions button{ background:rgba(255,255,255,.08); color:var(--fg); border:1px solid rgba(255,255,255,.12); padding:6px 8px; border-radius:8px; cursor:pointer; }
         .empty{color:var(--dim)}
-        .live-iframe{ width:100%; height:100%; border:none; border-radius:12px; background:#000; }
+        .live-iframe{width:100%;height:60vh;* ⬅ bigger, fills most of the screen height */min-height:420px;/* keeps it usable on small desktops */border:none;  border-radius:12px;  background:#000; }
         .bottom{ display:grid; grid-template-columns: 1fr 1fr 1fr; gap:16px; padding:16px; }
         @media (max-width: 980px){
           .layout{flex-direction:column}
