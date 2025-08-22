@@ -1,11 +1,10 @@
 'use client'
 import dynamic from 'next/dynamic';
 import React, { useEffect, useRef, useState } from 'react'
-import { db, dbRef, onValue, set } from '../utils/firebase'
+import { db, dbRef, set, subscribeToPreviewSlot, setPreviewSlot } from '../utils/firebase'
 import HymnDisplay from '../components/HymnDisplay'
 import BibleDisplay from '../components/BibleDisplay'
 import SlidesMini from '../components/SlidesMini'
-
 
 type SlotData = {
   id: string
@@ -66,15 +65,18 @@ function PreviewGrid() {
   const [slots, setSlots] = useState<Record<number, SlotData | null>>({1:null,2:null,3:null,4:null})
 
   useEffect(() => {
-    const offs = [1,2,3,4].map(i =>
-      onValue(dbRef(db, `preview_slots/slot${i}`), s => {
-        setSlots(p => ({ ...p, [i]: (s.val() || null) }))
-      })
+    const unsubs = [1,2,3,4].map(i =>
+      subscribeToPreviewSlot(
+        i,
+        (val) => setSlots(p => ({ ...p, [i]: val })),
+        (err) => console.error('Preview subscription error (slot '+i+'):', err)
+      )
     )
-    return () => offs.forEach(off => off())
+    return () => unsubs.forEach(u => u())
   }, [])
 
   const clear = (i:number) => set(dbRef(db, `preview_slots/slot${i}`), null)
+
   const goLive = async (i:number) => {
     const v = slots[i]
     if (!v) return
@@ -123,7 +125,7 @@ function Operator() {
   const sendToPreview = async () => {
     const html  = editorRef.current?.innerHTML ?? ''
     const title = titleRef.current?.value?.trim() || 'Untitled Slide'
-    await set(dbRef(db, `preview_slots/slot${slot}`), {
+    await setPreviewSlot(slot, {
       id: String(Date.now()),
       kind: 'workspace',
       title,
@@ -131,7 +133,7 @@ function Operator() {
     })
   }
 
-   return (
+  return (
     <>
       {/* ---- THE LAYOUT: Workspace | Preview | Live --- */}
       <div className="layout">
@@ -177,7 +179,7 @@ function Operator() {
         </section>
       </div>
 
-      {/* ---- NEW: bottom row with Hymns / Bible / Slides ---- */}
+      {/* ---- bottom row with Hymns / Bible / Slides ---- */}
       <div className="bottom">
         <div className="panel">
           <div className="panel-title">Hymns</div>
@@ -195,14 +197,10 @@ function Operator() {
 
       {/* --------- PAGE-SCOPED CSS ---------- */}
       <style jsx global>{`
-        :root{
-          /* same sizing & spacing; ONLY changed the colour scheme below */
-          --fg:#e5e7eb;--dim:#94a3b8;--glass:rgba(255,255,255,.06);
-        }
+        :root{ --fg:#e5e7eb; --dim:#94a3b8; --glass:rgba(255,255,255,.06); }
         html,body {height:100%}
         body{
           margin:0;color:var(--fg);
-          /* lighter wine + royal blue blend (keeps your current vibe) */
           background:
             radial-gradient(80rem 80rem at -10% -10%, rgba(130,48,86,.16), transparent 36%),
             radial-gradient(60rem 60rem at 110% -10%, rgba(45,62,158,.22), transparent 42%),
@@ -210,75 +208,40 @@ function Operator() {
           font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
         }
 
-        /* THE ROW */
-        .layout{
-          box-sizing:border-box; padding:16px 16px 0 16px;
-          display:flex; gap:16px; align-items:stretch;
-        }
+        .layout{ box-sizing:border-box; padding:16px 16px 0 16px; display:flex; gap:16px; align-items:stretch; }
         .col{min-width:0; display:flex; flex-direction:column}
         .col.workspace{flex:0 0 45%}
         .col.preview  {flex:0 0 35%}
         .col.live     {flex:0 0 20%}
 
-        /* cards */
-        .panel{
-          background:var(--glass);
-          border:1px solid rgba(255,255,255,.08);
-          border-radius:12px; padding:14px;
-          backdrop-filter: blur(8px);
-          box-shadow: 0 18px 36px rgba(0,0,0,.35);
-          display:flex; flex-direction:column; min-height:0;
-        }
+        .panel{ background:var(--glass); border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:14px;
+                backdrop-filter: blur(8px); box-shadow: 0 18px 36px rgba(0,0,0,.35); display:flex; flex-direction:column; min-height:0; }
         .panel-title{font-weight:700;margin-bottom:10px}
 
-        /* workspace */
         .ws-head{display:flex; gap:10px; align-items:center; margin-bottom:8px}
         .ws-head .title{
           flex:1; padding:8px 10px; border-radius:8px;
           border:1px solid rgba(255,255,255,.12); background:rgba(0,0,0,.25); color:var(--fg);
         }
-        .send select,.send button,.tb button,.tb select,label input[type=color]{
-          background:rgba(255,255,255,.08); color:var(--fg);
-          border:1px solid rgba(255,255,255,.15); padding:6px 10px; border-radius:8px; cursor:pointer;
-        }
         .tb{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px}
-        .editor{
-          flex:1; min-height:0; overflow:auto;
-          padding:14px; border-radius:10px;
-          background: rgba(0,0,0,.35);
-          border:1px solid rgba(255,255,255,.12);
-        }
+        .editor{ flex:1; min-height:0; overflow:auto; padding:14px; border-radius:10px; background: rgba(0,0,0,.35);
+                 border:1px solid rgba(255,255,255,.12); }
 
-        /* preview grid */
-        .preview-grid{
-          display:grid; grid-template-columns:1fr 1fr; grid-auto-rows:1fr;
-          gap:12px; flex:1; min-height:0;
-        }
-        .preview-cell{
-          display:grid; grid-template-rows:auto 1fr auto; min-height:0;
-          border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:10px;
-          background:#0b0f19;
-        }
+        .preview-grid{ display:grid; grid-template-columns:1fr 1fr; grid-auto-rows:1fr; gap:12px; flex:1; min-height:0; }
+        .preview-cell{ display:grid; grid-template-rows:auto 1fr auto; min-height:0;
+                       border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:10px; background:#0b0f19; }
         .cell-head{color:var(--dim); font-size:.9rem; margin-bottom:4px}
         .cell-body{min-height:0; overflow:auto}
         .cell-html{white-space:pre-wrap}
         .cell-actions{display:flex; gap:8px; margin-top:8px}
-        .cell-actions button{
-          background:rgba(255,255,255,.08); color:var(--fg);
-          border:1px solid rgba(255,255,255,.12); padding:6px 8px; border-radius:8px; cursor:pointer;
-        }
+        .cell-actions button{ background:rgba(255,255,255,.08); color:var(--fg);
+                              border:1px solid rgba(255,255,255,.12); padding:6px 8px; border-radius:8px; cursor:pointer; }
         .empty{color:var(--dim)}
 
-        /* live preview */
         .live-iframe{ width:100%; height:100%; border:none; border-radius:12px; background:#000; }
 
-        /* bottom row (new) */
-        .bottom{
-          display:grid; grid-template-columns: 1fr 1fr 1fr;
-          gap:16px; padding:16px;
-        }
+        .bottom{ display:grid; grid-template-columns: 1fr 1fr 1fr; gap:16px; padding:16px; }
 
-        /* responsive fallback */
         @media (max-width: 1200px){
           .col.workspace{flex-basis:50%}
           .col.preview{flex-basis:32%}
@@ -294,5 +257,4 @@ function Operator() {
     </>
   )
 }
- export default dynamic(() => Promise.resolve(Operator), { ssr: false });
-
+export default dynamic(() => Promise.resolve(Operator), { ssr: false });
