@@ -1,17 +1,10 @@
 // utils/firebase.ts
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
-  getDatabase,
-  ref,
-  onValue,
-  set,
-  update,
-  remove,
-  DataSnapshot,
-  Unsubscribe,
+  getDatabase, ref, onValue, set, update, remove,
+  DataSnapshot, Unsubscribe,
 } from 'firebase/database';
 
-/** ---- Firebase init (unchanged) ---- */
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
@@ -25,16 +18,13 @@ const firebaseConfig = {
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 export const db = getDatabase(app);
 
-/** ---- Types ---- */
-export type HtmlPayload = { kind?: 'html'; html: string; meta?: any };
-export type SlidesPayload = { kind: 'slides'; slides: string[]; index?: number; meta?: any };
+export type HtmlPayload   = { kind?: 'html';   html: string;  meta?: any };
+export type SlidesPayload = { kind: 'slides';  slides: string[]; index?: number; meta?: any };
 export type PreviewPayload = HtmlPayload | SlidesPayload | null;
 
-/** ---- Path helpers (safe, explicit) ---- */
-export const liveRef = () => ref(db, 'live_content');
+export const liveRef    = () => ref(db, 'live_content');
 export const previewRef = (slot: number) => ref(db, `preview_slots/${slot}`);
 
-/** ---- Listeners (backward compatible) ---- */
 export function listenLiveContent(
   cb: (v: { html: string; meta?: any } | null, snap?: DataSnapshot) => void
 ): Unsubscribe {
@@ -48,13 +38,10 @@ export function listenPreviewSlot(
   return onValue(previewRef(slot), (snap) => cb(snap.val(), snap));
 }
 
-/** ---- Writers / Mutators ---- */
 export async function setLiveContent(payload: { html: string; meta?: any }) {
   await set(liveRef(), payload);
 }
-export async function clearLiveContent() {
-  await remove(liveRef());
-}
+export async function clearLiveContent() { await remove(liveRef()); }
 
 export async function setPreviewSlot(slot: number, payload: HtmlPayload | SlidesPayload) {
   await set(previewRef(slot), payload);
@@ -62,46 +49,31 @@ export async function setPreviewSlot(slot: number, payload: HtmlPayload | Slides
 export async function updatePreviewSlot(slot: number, patch: Partial<SlidesPayload & HtmlPayload>) {
   await update(previewRef(slot), patch as any);
 }
-export async function clearPreviewSlot(slot: number) {
-  await set(previewRef(slot), null);
-}
+export async function clearPreviewSlot(slot: number) { await set(previewRef(slot), null); }
 export async function setPreviewIndex(slot: number, index: number) {
   await update(previewRef(slot), { index });
 }
 
-/** ---- Convenience helpers (optional) ---- */
-export async function pushSlidesToPreview(
-  slot: number,
-  slides: string[],
-  meta?: any,
-  startIndex = 0
-) {
+export async function pushSlidesToPreview(slot: number, slides: string[], meta?: any, startIndex = 0) {
   await setPreviewSlot(slot, { kind: 'slides', slides, index: startIndex, meta });
 }
 
 export async function pushLiveFromPreview(slot: number, index?: number) {
-  // Reads current preview slot and pushes the requested/current slide live
   return new Promise<void>((resolve, reject) => {
-    const unsub = onValue(
-      previewRef(slot),
-      async (snap) => {
-        try {
-          const val = snap.val() as PreviewPayload;
-          if (!val) return resolve(unsub());
-          if ((val as SlidesPayload).slides) {
-            const payload = val as SlidesPayload;
-            const i = typeof index === 'number' ? index : (payload.index ?? 0);
-            const html = payload.slides[i] ?? '';
-            await setLiveContent({ html, meta: { fromPreview: slot, index: i, total: payload.slides.length } });
-          } else if ((val as HtmlPayload).html) {
-            await setLiveContent({ html: (val as HtmlPayload).html, meta: { fromPreview: slot } });
-          }
-          resolve(unsub());
-        } catch (e) {
-          reject(e);
+    const unsub = onValue(previewRef(slot), async (snap) => {
+      try {
+        const val = snap.val() as PreviewPayload;
+        if (!val) return resolve(unsub());
+        if ((val as SlidesPayload).slides) {
+          const p = val as SlidesPayload;
+          const i = typeof index === 'number' ? index : (p.index ?? 0);
+          const html = p.slides[i] ?? '';
+          await setLiveContent({ html, meta: { fromPreview: slot, index: i, total: p.slides.length } });
+        } else if ((val as HtmlPayload).html) {
+          await setLiveContent({ html: (val as HtmlPayload).html, meta: { fromPreview: slot } });
         }
-      },
-      { onlyOnce: true }
-    );
+        resolve(unsub());
+      } catch (e) { reject(e); }
+    }, { onlyOnce: true });
   });
 }
