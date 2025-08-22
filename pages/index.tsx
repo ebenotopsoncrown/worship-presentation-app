@@ -227,6 +227,7 @@ function Operator() {
           .layout{flex-direction:column}
           .col.workspace,.col.preview,.col.live{flex-basis:auto}
           .bottom{grid-template-columns:1fr}
+          .col.live .panel{ flex:1 1 auto; }
           .live-iframe{aspect-ratio:16/9; height:auto}
         }
       `}</style>
