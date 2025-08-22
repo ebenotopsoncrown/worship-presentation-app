@@ -71,20 +71,18 @@ export default function HymnDisplay() {
     return blocks.join('');
   }
 
-  async function send(h: Hymn) {
-    try {
-      setBusyId(h.id);
-      const html = renderPreviewHtml(h);
-      await set(dbRef(db, `preview_slots/slot${slot}`), {
-        id: String(Date.now()),
-        kind: 'hymn',
-        title: `${h.number}. ${h.title}`,
-        html,
-      });
-    } finally {
-      setBusyId(null);
-    }
-  }
+  import { setPreviewSlot } from '../utils/firebase';
+// ...
+async function send(h: Hymn) {
+  const html = renderPreviewHtml(h);
+  await setPreviewSlot(slot, {
+    id: String(Date.now()),
+    kind: 'hymn',
+    title: `${h.number}. ${h.title}`,
+    html
+  });
+}
+
 
   return (
     <div className="panel" style={{ marginTop: 16 }}>
