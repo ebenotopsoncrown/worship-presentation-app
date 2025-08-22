@@ -1,10 +1,10 @@
+'use client';
 import { useState } from 'react';
-import { db, dbRef, set } from '../utils/firebase';
+import { setPreviewSlot } from '../utils/firebase';
 
 type Slot = 1 | 2 | 3 | 4;
 type Version = 'KJV' | 'NIV' | 'ESV';
 
-// Safe helpers
 const asArr = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 const asStr = (v: unknown): string => (typeof v === 'string' ? v : '');
 
@@ -19,11 +19,7 @@ export default function BibleDisplay() {
       const q = encodeURIComponent(reference.trim());
       const r = await fetch(`/api/bible?q=${q}&v=${version}`);
       if (!r.ok) throw new Error('Bible API failed');
-      const json = (await r.json()) as {
-        lines?: unknown;
-        title?: unknown;
-      };
-      // Normalize shape
+      const json = (await r.json()) as { lines?: unknown; title?: unknown };
       const title = asStr(json.title) || `${reference} (${version})`;
       const lines = asArr<string>(json.lines);
       return {
@@ -31,7 +27,6 @@ export default function BibleDisplay() {
         lines: lines.length ? lines : [`[No verses returned] ${reference} (${version})`],
       };
     } catch {
-      // Safe fallback so UI still works
       return {
         title: `${reference} (${version})`,
         lines: [`[Bible API not configured] ${reference} (${version})`],
@@ -43,16 +38,17 @@ export default function BibleDisplay() {
     if (busy) return;
     setBusy(true);
     try {
-      import { setPreviewSlot } from '../utils/firebase';
-// ...
-const data = await fetchVerses(ref, ver);
-await setPreviewSlot(slot, {
-  id: `${Date.now()}-bible`,
-  kind: 'bible',
-  title: data.title,
-  lines: data.lines,
-});
-
+      const data = await fetchVerses(ref, ver);
+      await setPreviewSlot(slot, {
+        id: `${Date.now()}-bible`,
+        kind: 'bible',
+        title: data.title,
+        lines: asArr<string>(data.lines),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
