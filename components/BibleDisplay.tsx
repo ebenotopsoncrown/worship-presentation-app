@@ -43,18 +43,16 @@ export default function BibleDisplay() {
     if (busy) return;
     setBusy(true);
     try {
-      const data = await fetchVerses(ref, ver);
-      await set(dbRef(db, `preview_slots/slot${slot}`), {
-        id: `${Date.now()}-bible`,
-        kind: 'bible',
-        title: data.title,
-        lines: asArr<string>(data.lines),
-        groupSize: 2,
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
+      import { setPreviewSlot } from '../utils/firebase';
+// ...
+const data = await fetchVerses(ref, ver);
+await setPreviewSlot(slot, {
+  id: `${Date.now()}-bible`,
+  kind: 'bible',
+  title: data.title,
+  lines: data.lines,
+});
+
 
   return (
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
