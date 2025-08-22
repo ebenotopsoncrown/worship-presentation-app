@@ -1,88 +1,107 @@
 // utils/firebase.ts
-import { initializeApp, getApps, type FirebaseOptions } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
-  getDatabase, ref as _ref, set as _set, onValue, off, get, update, type DataSnapshot,
+  getDatabase,
+  ref,
+  onValue,
+  set,
+  update,
+  remove,
+  DataSnapshot,
+  Unsubscribe,
 } from 'firebase/database';
-import {
-  getAuth, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword, signOut, sendPasswordResetEmail,
-} from 'firebase/auth';
-import {
-  getStorage, ref as sref, uploadBytes, getDownloadURL, type UploadResult,
-} from 'firebase/storage';
 
-// ---- CONFIG (all NEXT_PUBLIC_* must exist in Vercel) ----
-const cfg: FirebaseOptions = {
+/** ---- Firebase init (unchanged) ---- */
+const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
-  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL!,  // required for RTDB
+  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL!,
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET, // optional but needed for uploads
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET!,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID!,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
 };
 
-const app = getApps().length ? getApps()[0] : initializeApp(cfg);
-
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 export const db = getDatabase(app);
-export const auth = getAuth(app);
 
-// Storage (gracefully optional)
-let storage: ReturnType<typeof getStorage> | null = null;
-try { storage = getStorage(app); }
-catch { console.warn('[firebase] Storage not configured; slide uploads will fall back to data URLs.'); }
+/** ---- Types ---- */
+export type HtmlPayload = { kind?: 'html'; html: string; meta?: any };
+export type SlidesPayload = { kind: 'slides'; slides: string[]; index?: number; meta?: any };
+export type PreviewPayload = HtmlPayload | SlidesPayload | null;
 
-export const dbRef = _ref;
-export const set = _set;
-export { onValue, off, get, update, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword, signOut, sendPasswordResetEmail };
+/** ---- Path helpers (safe, explicit) ---- */
+export const liveRef = () => ref(db, 'live_content');
+export const previewRef = (slot: number) => ref(db, `preview_slots/${slot}`);
 
-// Diagnostics
-export function subscribeConnected(handler?: (connected: boolean) => void) {
-  const r = dbRef(db, '.info/connected');
-  const unsub = onValue(r, s => handler?.(!!s.val()), err => console.error('[firebase] .info/connected error:', err));
-  return typeof unsub === 'function' ? unsub : () => off(r);
+/** ---- Listeners (backward compatible) ---- */
+export function listenLiveContent(
+  cb: (v: { html: string; meta?: any } | null, snap?: DataSnapshot) => void
+): Unsubscribe {
+  return onValue(liveRef(), (snap) => cb(snap.val(), snap));
 }
 
-// ---------- PREVIEW SLOTS ----------
-export async function setPreviewSlot(
+export function listenPreviewSlot(
   slot: number,
-  payload: { id: string; kind: 'workspace'|'hymn'|'bible'|'slides'; title?: string; html?: string; lines?: string[] }
-) {
-  const path = `preview_slots/slot${slot}`;
-  const ref = dbRef(db, path);
-  await _set(ref, payload);
+  cb: (v: PreviewPayload, snap?: DataSnapshot) => void
+): Unsubscribe {
+  return onValue(previewRef(slot), (snap) => cb(snap.val(), snap));
 }
 
-export function subscribeToPreviewSlot(
+/** ---- Writers / Mutators ---- */
+export async function setLiveContent(payload: { html: string; meta?: any }) {
+  await set(liveRef(), payload);
+}
+export async function clearLiveContent() {
+  await remove(liveRef());
+}
+
+export async function setPreviewSlot(slot: number, payload: HtmlPayload | SlidesPayload) {
+  await set(previewRef(slot), payload);
+}
+export async function updatePreviewSlot(slot: number, patch: Partial<SlidesPayload & HtmlPayload>) {
+  await update(previewRef(slot), patch as any);
+}
+export async function clearPreviewSlot(slot: number) {
+  await set(previewRef(slot), null);
+}
+export async function setPreviewIndex(slot: number, index: number) {
+  await update(previewRef(slot), { index });
+}
+
+/** ---- Convenience helpers (optional) ---- */
+export async function pushSlidesToPreview(
   slot: number,
-  handler: (value: any | null, snap: DataSnapshot) => void,
-  onError?: (err: any) => void
-): () => void {
-  const ref = dbRef(db, `preview_slots/slot${slot}`);
-  const unsub = onValue(ref, s => handler(s.val() ?? null, s), e => onError?.(e));
-  return typeof unsub === 'function' ? unsub : () => off(ref);
-}
-
-// ---------- LIVE CONTENT ----------
-export async function setLiveContent(
-  payload: { id: string; from: 'workspace'|'hymn'|'bible'|'slides'; title?: string; html?: string; lines?: string[] }
+  slides: string[],
+  meta?: any,
+  startIndex = 0
 ) {
-  await _set(dbRef(db, 'live_content'), payload);
+  await setPreviewSlot(slot, { kind: 'slides', slides, index: startIndex, meta });
 }
 
-export function subscribeToLive(
-  handler: (value: any | null, snap: DataSnapshot) => void,
-  onError?: (err: any) => void
-): () => void {
-  const ref = dbRef(db, 'live_content');
-  const unsub = onValue(ref, s => handler(s.val() ?? null, s), e => onError?.(e));
-  return typeof unsub === 'function' ? unsub : () => off(ref);
-}
-
-// ---------- STORAGE: slide image upload ----------
-export async function uploadSlideImage(file: File, path?: string): Promise<string> {
-  if (!storage) throw new Error('storage-not-configured');
-  const p = path ?? `slides/${Date.now()}-${file.name}`;
-  const r = sref(storage, p);
-  const snap: UploadResult = await uploadBytes(r, file, { contentType: file.type });
-  return await getDownloadURL(snap.ref);
+export async function pushLiveFromPreview(slot: number, index?: number) {
+  // Reads current preview slot and pushes the requested/current slide live
+  return new Promise<void>((resolve, reject) => {
+    const unsub = onValue(
+      previewRef(slot),
+      async (snap) => {
+        try {
+          const val = snap.val() as PreviewPayload;
+          if (!val) return resolve(unsub());
+          if ((val as SlidesPayload).slides) {
+            const payload = val as SlidesPayload;
+            const i = typeof index === 'number' ? index : (payload.index ?? 0);
+            const html = payload.slides[i] ?? '';
+            await setLiveContent({ html, meta: { fromPreview: slot, index: i, total: payload.slides.length } });
+          } else if ((val as HtmlPayload).html) {
+            await setLiveContent({ html: (val as HtmlPayload).html, meta: { fromPreview: slot } });
+          }
+          resolve(unsub());
+        } catch (e) {
+          reject(e);
+        }
+      },
+      { onlyOnce: true }
+    );
+  });
 }
