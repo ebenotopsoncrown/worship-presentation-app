@@ -5,8 +5,10 @@ import {
   ref as _ref,
   set,
   onValue,
+  off,
   get,
   update,
+  type DataSnapshot,
 } from 'firebase/database'
 import {
   getAuth,
@@ -36,22 +38,41 @@ export const auth = getAuth(app)
 
 // ---- DB helpers ----
 export const dbRef = _ref
-export { set, onValue, get, update }
+export { set, onValue, off, get, update }
 
 // Write to a preview slot and surface errors in console/UI
 export async function setPreviewSlot(
   slot: number,
-  payload: { id: string; kind: 'workspace'|'hymn'|'bible'; title?: string; html?: string; lines?: string[] }
+  payload: { id: string; kind: 'workspace'|'hymn'|'bible'|'slides'; title?: string; html?: string; lines?: string[] }
 ) {
   const path = `preview_slots/slot${slot}`;
   try {
     await set(dbRef(db, path), payload);
   } catch (err) {
     console.error('setPreviewSlot failed:', path, err);
-    throw err; // let the caller show a message if desired
+    throw err;
   }
 }
 
+// Subscribe to a preview slot; always returns an unsubscribe
+export function subscribeToPreviewSlot(
+  slot: number,
+  handler: (value: any | null, snap: DataSnapshot) => void,
+  onError?: (err: any) => void
+): () => void {
+  const path = `preview_slots/slot${slot}`;
+  const ref = dbRef(db, path);
+  const unsubscribe = onValue(
+    ref,
+    (snap) => handler(snap.val() ?? null, snap),
+    (err) => {
+      console.error('onValue error:', path, err);
+      onError?.(err);
+    }
+  );
+  // RTDB onValue returns an unsubscribe in v9; fall back to off() if needed.
+  return typeof unsubscribe === 'function' ? unsubscribe : () => off(ref);
+}
 
 // ---- Auth helpers ----
 export {
