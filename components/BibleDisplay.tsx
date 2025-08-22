@@ -24,7 +24,6 @@ export default function BibleDisplay() {
       const lines = asArr<string>(json.lines);
       return { title, lines: lines.length ? lines : [`[No verses returned] ${reference} (${version})`] };
     } catch {
-      // Fallback if API route isn't implemented yet
       return { title: `${reference} (${version})`, lines: [`[Bible API not configured] ${reference} (${version})`] };
     }
   };
@@ -52,60 +51,16 @@ export default function BibleDisplay() {
         value={ref}
         onChange={(e) => setRef(e.target.value)}
         placeholder="e.g. John 3:16-18"
-        style={{
-          minWidth: 220,
-          flex: '1 1 220px',
-          padding: '8px 10px',
-          borderRadius: 8,
-          border: '1px solid rgba(255,255,255,.15)',
-          background: 'rgba(255,255,255,.08)',
-          color: '#e5e7eb',
-        }}
+        style={{ minWidth: 220, flex:'1 1 220px', padding:'8px 10px', borderRadius:8, border:'1px solid rgba(255,255,255,.15)', background:'rgba(255,255,255,.08)', color:'#e5e7eb' }}
       />
-      <select
-        value={ver}
-        onChange={(e) => setVer(e.target.value as Version)}
-        style={{
-          padding: '6px 10px',
-          borderRadius: 8,
-          background: 'rgba(255,255,255,.08)',
-          color: '#e5e7eb',
-          border: '1px solid rgba(255,255,255,.15)',
-        }}
-      >
-        <option>KJV</option>
-        <option>NIV</option>
-        <option>ESV</option>
+      <select value={ver} onChange={(e) => setVer(e.target.value as Version)} style={{ padding:'6px 10px', borderRadius:8, background:'rgba(255,255,255,.08)', color:'#e5e7eb', border:'1px solid rgba(255,255,255,.15)' }}>
+        <option>KJV</option><option>NIV</option><option>ESV</option>
       </select>
       <span style={{ opacity: 0.7 }}>→</span>
-      <select
-        value={slot}
-        onChange={(e) => setSlot(Number(e.target.value) as Slot)}
-        style={{
-          padding: '6px 10px',
-          borderRadius: 8,
-          background: 'rgba(255,255,255,.08)',
-          color: '#e5e7eb',
-          border: '1px solid rgba(255,255,255,.15)',
-        }}
-      >
-        <option value={1}>Preview 1</option>
-        <option value={2}>Preview 2</option>
-        <option value={3}>Preview 3</option>
-        <option value={4}>Preview 4</option>
+      <select value={slot} onChange={(e) => setSlot(Number(e.target.value) as Slot)} style={{ padding:'6px 10px', borderRadius:8, background:'rgba(255,255,255,.08)', color:'#e5e7eb', border:'1px solid rgba(255,255,255,.15)' }}>
+        <option value={1}>Preview 1</option><option value={2}>Preview 2</option><option value={3}>Preview 3</option><option value={4}>Preview 4</option>
       </select>
-      <button
-        disabled={busy}
-        onClick={send}
-        style={{
-          padding: '6px 10px',
-          borderRadius: 8,
-          background: 'rgba(255,255,255,.08)',
-          color: '#e5e7eb',
-          border: '1px solid rgba(255,255,255,.12)',
-          opacity: busy ? 0.6 : 1,
-        }}
-      >
+      <button disabled={busy} onClick={send} style={{ padding:'6px 10px', borderRadius:8, background:'rgba(255,255,255,.08)', color:'#e5e7eb', border:'1px solid rgba(255,255,255,.12)', opacity: busy ? .6 : 1 }}>
         {busy ? 'Sending…' : 'Send to Preview'}
       </button>
     </div>
