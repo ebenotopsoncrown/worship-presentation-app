@@ -4,62 +4,79 @@ import HymnDisplay from '../components/HymnDisplay';
 import BibleDisplay from '../components/BibleDisplay';
 import SlidesMini from '../components/SlidesMini';
 import {
-  listenPreviewSlot,
-  setLiveContent,
-  clearPreviewSlot,
-  type PreviewPayload,
-} from '../utils/firebase';
 
-/** A simple card that shows whatever is currently in a preview slot. */
-function SimplePreviewCard({ slot, title }: { slot: number; title: string }) {
-  const [payload, setPayload] = React.useState<PreviewPayload>(null);
+  
+ type PreviewPanelProps = {
+  title: string;
+  html?: string | null;
+  slot: number;
+  onClear: () => void;
+  onGoLive?: () => void; // not used for Live panel
+};
 
-  React.useEffect(() => {
-    const off = listenPreviewSlot(slot, (v) => setPayload(v));
-    return () => off();
-  }, [slot]);
-
-  // Slide-first; fall back to html.
-  const html =
-    (payload && (payload as any).slides && (payload as any).slides[(payload as any).index ?? 0]) ||
-    (payload && (payload as any).html) ||
-    '';
-
+function PreviewPanel({
+  title,
+  html,
+  slot,
+  onClear,
+  onGoLive,
+}: PreviewPanelProps) {
   return (
-    <div className="bg-zinc-900 rounded-2xl p-4 shadow-inner border border-zinc-800">
-      <div className="flex items-center justify-between mb-2">
-        <div className="text-zinc-200 font-semibold">{title}</div>
-      </div>
+    <div className="panel panel--preview">
+      <div className="panel-header">{title}</div>
 
-      <div className="bg-black/40 rounded-xl min-h-[180px] h-[220px] overflow-auto flex items-center justify-center p-4">
+      <div className="preview-frame flex items-center justify-center">
         {html ? (
           <div
             className="w-full text-center leading-tight text-zinc-100"
             dangerouslySetInnerHTML={{ __html: html }}
           />
         ) : (
-          <div className="text-zinc-500">Empty</div>
+          <div className="text-zinc-400">Empty</div>
         )}
       </div>
 
       <div className="flex items-center justify-between mt-3 gap-2">
-        <button
-          onClick={() => clearPreviewSlot(slot)}
-          className="px-3 py-1.5 text-sm rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200"
-        >
-          Clear
-        </button>
-        <button
-          onClick={() => html && setLiveContent({ html, meta: { fromPreview: slot } })}
-          className="px-3 py-1.5 text-sm rounded bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 text-white"
-          disabled={!html}
-        >
-          Go Live
-        </button>
+        <button onClick={onClear} className="btn btn-ghost">Clear</button>
+        {/* Only show Go Live when we have content and this is a preview slot */}
+        {onGoLive && (
+          <button
+            className="btn btn-green"
+            onClick={onGoLive}
+            disabled={!html}
+          >
+            Go Live
+          </button>
+        )}
       </div>
     </div>
   );
 }
+
+type LivePanelProps = {
+  title: string;
+  html?: string | null;
+};
+
+function LivePanel({ title, html }: LivePanelProps) {
+  return (
+    <div className="panel panel--live">
+      <div className="panel-header">{title}</div>
+
+      <div className="preview-frame flex items-center justify-center">
+        {html ? (
+          <div
+            className="w-full text-center leading-tight text-zinc-100"
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        ) : (
+          <div className="text-zinc-400">Empty</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 
 /** Shows the current live output. */
 function LiveScreen() {
