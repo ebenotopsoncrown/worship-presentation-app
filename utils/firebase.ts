@@ -1,10 +1,27 @@
 // utils/firebase.ts
-import { initializeApp, getApps, getApp } from 'firebase/app';
+import { initializeApp, getApps } from "firebase/app";
 import {
-  getDatabase, ref, onValue, set, update, remove,
-  DataSnapshot, Unsubscribe,
-} from 'firebase/database';
+  getDatabase,
+  ref,
+  set,
+  onValue,
+  off,
+  serverTimestamp,
+  DatabaseReference,
+} from "firebase/database";
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail,
+} from "firebase/auth";
+import {
+  getStorage,
+  ref as storageRef,
+  uploadBytes,
+  getDownloadURL,
+} from "firebase/storage";
 
+// ---- App init ----
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
@@ -15,65 +32,75 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
 };
 
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+const app = getApps().length ? getApps()[0]! : initializeApp(firebaseConfig);
 export const db = getDatabase(app);
+export const auth = getAuth(app);
+export const storage = getStorage(app);
 
-export type HtmlPayload   = { kind?: 'html';   html: string;  meta?: any };
-export type SlidesPayload = { kind: 'slides';  slides: string[]; index?: number; meta?: any };
-export type PreviewPayload = HtmlPayload | SlidesPayload | null;
+// ---- Legacy-style re-exports (to satisfy existing imports) ----
+// Some files do: import { ref as dbRef, onValue, set, auth } from '../utils/firebase'
+export { ref, onValue, set, off } from "firebase/database";
+export { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 
-export const liveRef    = () => ref(db, 'live_content');
-export const previewRef = (slot: number) => ref(db, `preview_slots/${slot}`);
+// ---- Paths ----
+const previewRef = (slot: number) => ref(db, `preview_slots/${slot}`);
+const liveRef = ref(db, "live_content");
 
-export function listenLiveContent(
-  cb: (v: { html: string; meta?: any } | null, snap?: DataSnapshot) => void
-): Unsubscribe {
-  return onValue(liveRef(), (snap) => cb(snap.val(), snap));
+// ---- Types ----
+export type PreviewSlidesPayload = {
+  kind: "slides";
+  slides: string[];
+  index?: number;
+  meta?: any;
+};
+export type PreviewHtmlPayload = {
+  html: string;
+  meta?: any;
+};
+export type PreviewPayload = PreviewSlidesPayload | PreviewHtmlPayload | null;
+
+// ---- Preview helpers (new) ----
+export async function setPreviewSlot(slot: number, payload: PreviewPayload) {
+  await set(previewRef(slot), payload);
 }
 
 export function listenPreviewSlot(
   slot: number,
-  cb: (v: PreviewPayload, snap?: DataSnapshot) => void
-): Unsubscribe {
-  return onValue(previewRef(slot), (snap) => cb(snap.val(), snap));
+  cb: (payload: PreviewPayload) => void
+) {
+  const r = previewRef(slot);
+  const unsub = onValue(r, (snap) => cb((snap.exists() ? snap.val() : null) as PreviewPayload));
+  // Return an unsubscribe function
+  return () => off(r);
 }
 
 export async function setLiveContent(payload: { html: string; meta?: any }) {
-  await set(liveRef(), payload);
-}
-export async function clearLiveContent() { await remove(liveRef()); }
-
-export async function setPreviewSlot(slot: number, payload: HtmlPayload | SlidesPayload) {
-  await set(previewRef(slot), payload);
-}
-export async function updatePreviewSlot(slot: number, patch: Partial<SlidesPayload & HtmlPayload>) {
-  await update(previewRef(slot), patch as any);
-}
-export async function clearPreviewSlot(slot: number) { await set(previewRef(slot), null); }
-export async function setPreviewIndex(slot: number, index: number) {
-  await update(previewRef(slot), { index });
-}
-
-export async function pushSlidesToPreview(slot: number, slides: string[], meta?: any, startIndex = 0) {
-  await setPreviewSlot(slot, { kind: 'slides', slides, index: startIndex, meta });
-}
-
-export async function pushLiveFromPreview(slot: number, index?: number) {
-  return new Promise<void>((resolve, reject) => {
-    const unsub = onValue(previewRef(slot), async (snap) => {
-      try {
-        const val = snap.val() as PreviewPayload;
-        if (!val) return resolve(unsub());
-        if ((val as SlidesPayload).slides) {
-          const p = val as SlidesPayload;
-          const i = typeof index === 'number' ? index : (p.index ?? 0);
-          const html = p.slides[i] ?? '';
-          await setLiveContent({ html, meta: { fromPreview: slot, index: i, total: p.slides.length } });
-        } else if ((val as HtmlPayload).html) {
-          await setLiveContent({ html: (val as HtmlPayload).html, meta: { fromPreview: slot } });
-        }
-        resolve(unsub());
-      } catch (e) { reject(e); }
-    }, { onlyOnce: true });
+  await set(liveRef, {
+    ...payload,
+    ts: serverTimestamp(),
   });
+}
+
+export function listenLiveContent(cb: (payload: { html: string; meta?: any } | null) => void) {
+  const unsub = onValue(liveRef, (snap) =>
+    cb((snap.exists() ? snap.val() : null) as any)
+  );
+  return () => off(liveRef);
+}
+
+// ---- Compatibility shims for older code ----
+/** Old name used somewhere; keep it working. */
+export const subscribeToLive = listenLiveContent;
+
+/** Some code imports `dbRef` from this module (aliasing `ref`). */
+export { ref as dbRef } from "firebase/database";
+
+/** Upload an image and return a public URL (used by Slides panel). */
+export async function uploadSlideImage(file: Blob, filename?: string): Promise<string> {
+  const name =
+    filename ||
+    `slide-${Date.now()}-${Math.random().toString(36).slice(2)}.png`;
+  const sref = storageRef(storage, `slides/${name}`);
+  await uploadBytes(sref, file);
+  return await getDownloadURL(sref);
 }
