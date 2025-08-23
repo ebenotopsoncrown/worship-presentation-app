@@ -95,18 +95,29 @@ export default function IndexPage() {
         };
 
         // 🔔 subscribe to previews
-        [1, 2, 3, 4].forEach((slot) => {
-          const off = onValue(previewRef(slot), (snap: any) => {
-            const data = snap?.val?.() ?? snap?.val?. ?? snap;
-            const html = data?.html ?? data ?? '';
-            const value = toStr(html);
-            if (slot === 1) setP1(value || null);
-            if (slot === 2) setP2(value || null);
-            if (slot === 3) setP3(value || null);
-            if (slot === 4) setP4(value || null);
-          });
-          unsubscribes.push(() => off && off());
-        });
+[1, 2, 3, 4].forEach((slot) => {
+  const off = onValue(previewRef(slot), (snap: any) => {
+    // In RTDB, snap.val() returns the data. Guard if val is not a function.
+    const s: any = snap;
+    const raw =
+      typeof s?.val === 'function'
+        ? s.val()
+        : (s?.val ?? s);
+
+    const html =
+      raw && typeof raw === 'object' && 'html' in raw ? (raw as any).html : raw ?? '';
+
+    const value = toStr(html);
+
+    if (slot === 1) setP1(value || null);
+    if (slot === 2) setP2(value || null);
+    if (slot === 3) setP3(value || null);
+    if (slot === 4) setP4(value || null);
+  });
+
+  // If you collect unsubs:
+  // offs.push(off);
+});
 
         // 🔔 subscribe to live
         const offLive = onValue(liveRef(), (snap: any) => {
