@@ -19,26 +19,43 @@ function SimplePreviewCard({ slot, title, flavor }: { slot: number; title: strin
     '';
 
   return (
-    <div className={`panel panel-${flavor} ${flavor === 'live' ? 'panel--live' : ''}`}>
-      <div className="panel-header">{title}</div>
+  <div className={`panel panel-${flavor} ${flavor === 'live' ? 'panel--live' : ''}`}>
+    <div className="panel-header">{title}</div>
 
-      <div className="preview-frame flex items-center justify-center">
-       <div className={`panel panel-${flavor} ${flavor === 'live' ? 'panel--live' : ''}`}>
-      </div>
-
-      <div className="flex items-center justify-between mt-3 gap-2">
-        <button onClick={() => clearPreviewSlot(slot)} className="btn btn-ghost">Clear</button>
-        <button
-          onClick={() => html && setLiveContent({ html, meta: { fromPreview: slot } })}
-          className="btn btn-green"
-          disabled={!html}
-        >
-          Go Live
-        </button>
-      </div>
+    <div className="preview-frame flex items-center justify-center">
+      {html ? (
+        <div
+          className={`w-full text-center leading-tight text-zinc-100 ${
+            flavor === 'live' ? 'live-html' : ''
+          }`}
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      ) : (
+        <div className="text-zinc-400">Empty</div>
+      )}
     </div>
-  );
-}
+
+    <div className="flex items-center justify-between mt-3 gap-2">
+      <button
+        onClick={() => clearPreviewSlot(slot)}
+        className="btn btn-ghost"
+      >
+        Clear
+      </button>
+
+      <button
+        onClick={() =>
+          html && setLiveContent({ html, meta: { fromPreview: slot } })
+        }
+        className="btn btn-green"
+        disabled={!html}
+      >
+        Go Live
+      </button>
+    </div>
+  </div>
+);
+
 
 function LiveScreen() {
   const [html, setHtml] = React.useState<string>('');
