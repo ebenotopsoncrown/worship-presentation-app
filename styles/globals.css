@@ -130,3 +130,12 @@ button.primary{ background: linear-gradient(90deg, #823056, #2d3e9e); color:#fff
 button.ghost{ background:rgba(255,255,255,.85); }
 select:focus, input:focus, button:focus{ outline:none; box-shadow: 0 0 0 3px var(--ring); }
 .muted{ color:var(--muted); font-size:.9rem; }
+
+/* styles/globals.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* App defaults */
+html, body, #__next { height: 100%; }
+body { @apply bg-zinc-950 text-zinc-100; }
