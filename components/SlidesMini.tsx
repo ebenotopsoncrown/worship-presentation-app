@@ -7,43 +7,83 @@ export default function SlidesMini() {
   const [title, setTitle] = useState('Welcome');
   const [text, setText] = useState('Welcome to church!');
   const [slot, setSlot] = useState<Slot>(2);
-  const [imgDataUrl, setImgDataUrl] = useState<string>('');
+  const [slidesImgs, setSlidesImgs] = useState<string[]>([]); // data-URLs for imported images
+  const [notice, setNotice] = useState<string>('');
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const onImportClick = () => fileRef.current?.click();
 
   const onFileChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
+    setNotice('');
     const f = e.target.files?.[0];
     if (!f) return;
-    const reader = new FileReader();
-    reader.onload = () => setImgDataUrl(String(reader.result || ''));
-    reader.readAsDataURL(f);
+
+    const name = (f.name || '').toLowerCase();
+    const type = f.type || '';
+
+    // Only handle images in-browser. For PPT/PDF, show guidance.
+    const isImg = type.startsWith('image/');
+    const isPpt = name.endsWith('.ppt') || name.endsWith('.pptx');
+    const isPdf = name.endsWith('.pdf');
+
+    if (isImg) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setSlidesImgs([String(reader.result || '')]);
+        setNotice('');
+      };
+      reader.readAsDataURL(f);
+    } else if (isPpt || isPdf) {
+      setSlidesImgs([]);
+      setNotice('PPT/PDF detected — please export your slides to images (JPG/PNG) and import them here.');
+    } else {
+      setSlidesImgs([]);
+      setNotice('Unsupported file type. Please import JPG/PNG.');
+    }
+
+    // reset the input so re-selecting same file triggers onChange
+    e.currentTarget.value = '';
   };
 
-  const buildHtml = () => {
-    if (imgDataUrl) {
-      return `<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%">
-        <img src="${imgDataUrl}" alt="${title || 'Slide'}" style="max-width:100%;max-height:100%;object-fit:contain"/>
-      </div>`;
+  const clearImport = () => {
+    setSlidesImgs([]);
+    setNotice('');
+  };
+
+  const buildHtmlSlides = (): string[] => {
+    if (slidesImgs.length) {
+      // one slide per imported image
+      return slidesImgs.map(
+        (src) =>
+          `<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%">
+             <img src="${src}" alt="${title || 'Slide'}" style="max-width:100%;max-height:100%;object-fit:contain"/>
+           </div>`
+      );
     }
+    // text slide (single)
     const body = text.replace(/\n/g, '<br/>');
-    return `<div style="font-size:52px; line-height:1.22">${body}</div>`;
+    return [`<div style="font-size:52px; line-height:1.22">${body}</div>`];
   };
 
   const send = async () => {
     setBusy(true);
     try {
-      const html = buildHtml();
+      const slides = buildHtmlSlides();
       if (slot === 1) {
+        // queued
         await setPreviewSlot(1, {
           kind: 'slides',
-          slides: [html],
+          slides,
           index: 0,
           meta: { type: 'slide', title },
         });
       } else {
-        await setPreviewSlot(slot, { html, meta: { type: 'slide', title } });
+        // non-queued: stack slides vertically in one HTML payload (scrollable in panel)
+        const stacked = slides
+          .map((s) => `<div style="margin-bottom:12px">${s}</div>`)
+          .join('');
+        await setPreviewSlot(slot, { html: stacked, meta: { type: 'slide', title } });
       }
     } finally {
       setBusy(false);
@@ -62,8 +102,18 @@ export default function SlidesMini() {
           className="field min-w-[220px] flex-1"
         />
 
-        <button onClick={onImportClick} className="btn btn-ghost">Import slide (image)</button>
-        <input ref={fileRef} type="file" accept="image/*" onChange={onFileChange} className="hidden" />
+        <button onClick={onImportClick} className="btn btn-ghost">Import slide (PPT/JPG)</button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".ppt,.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint,image/*,.pdf"
+          onChange={onFileChange}
+          className="hidden"
+        />
+
+        {slidesImgs.length > 0 && (
+          <button onClick={clearImport} className="btn btn-ghost">Clear import</button>
+        )}
 
         <span className="opacity-70">Send to</span>
         <select value={slot} onChange={(e) => setSlot(Number(e.target.value) as Slot)} className="select">
@@ -78,11 +128,17 @@ export default function SlidesMini() {
         </button>
       </div>
 
-      {/* scrolling preview area: shows image preview when selected; otherwise text editor */}
+      {/* scrolling preview area */}
       <div className="preview-frame">
-        {imgDataUrl ? (
+        {notice && <div className="text-amber-300 text-sm mb-2">{notice}</div>}
+
+        {slidesImgs.length > 0 ? (
           <div className="w-full h-full flex items-center justify-center">
-            <img src={imgDataUrl} alt="Preview" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+            <img
+              src={slidesImgs[0]}
+              alt="Imported preview"
+              style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+            />
           </div>
         ) : (
           <textarea
