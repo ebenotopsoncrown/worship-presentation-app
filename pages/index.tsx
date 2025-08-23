@@ -1,4 +1,7 @@
-import React from 'react';
+'use client';
+
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import AppHeader from '../components/AppHeader';
 import PreviewQueue from '../components/PreviewQueue';
 import HymnDisplay from '../components/HymnDisplay';
 import BibleDisplay from '../components/BibleDisplay';
@@ -10,6 +13,7 @@ import {
   title: string;
   html?: string | null;
   slot: number;
+  flavor?: 'default' | 'live';
   onClear: () => void;
   onGoLive?: () => void; // not used for Live panel
 };
