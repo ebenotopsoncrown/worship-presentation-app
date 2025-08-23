@@ -94,3 +94,23 @@ body{ background: var(--bg); color: var(--text); }
   @apply rounded-md bg-zinc-800 px-2 py-2 outline-none;
   border: 1px solid rgba(255,255,255,.08);
 }
+
+    /* === Live panel: use full column height and keep internal scroll === */
+.panel--live {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.panel--live .preview-frame {
+  flex: 1;          /* fill remaining height */
+  min-height: 0;    /* allow flex child to shrink/grow */
+  max-height: none; /* remove small cap used by previews */
+  overflow: auto;   /* keep scroll if content is taller */
+}
+
+/* Optional: make live text scale nicely */
+.live-html {
+  font-size: clamp(28px, 3.2vw, 52px);
+  line-height: 1.15;
+}
