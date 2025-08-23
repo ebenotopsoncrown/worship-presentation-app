@@ -7,7 +7,9 @@ import {
   onValue,
   off,
   serverTimestamp,
-  DatabaseReference,
+  get,
+  update,
+  DataSnapshot,
 } from "firebase/database";
 import {
   getAuth,
@@ -37,16 +39,13 @@ export const db = getDatabase(app);
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 
-// ---- Legacy-style re-exports (to satisfy existing imports) ----
-// Some files do: import { ref as dbRef, onValue, set, auth } from '../utils/firebase'
-export { ref, onValue, set, off } from "firebase/database";
+// ---- Re-exports (compat with existing imports) ----
+export { ref, onValue, set, off, update } from "firebase/database";
 export { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 
-// ---- Paths ----
-const previewRef = (slot: number) => ref(db, `preview_slots/${slot}`);
-const liveRef = ref(db, "live_content");
+// ---- Helpers ----
+export const dbRef = (path: string) => ref(db, path);
 
-// ---- Types ----
 export type PreviewSlidesPayload = {
   kind: "slides";
   slides: string[];
@@ -59,47 +58,62 @@ export type PreviewHtmlPayload = {
 };
 export type PreviewPayload = PreviewSlidesPayload | PreviewHtmlPayload | null;
 
-// ---- Preview helpers (new) ----
+const previewRef = (slot: number) => ref(db, `preview_slots/${slot}`);
+const liveRef = ref(db, "live_content");
+
+// Write preview payload
 export async function setPreviewSlot(slot: number, payload: PreviewPayload) {
   await set(previewRef(slot), payload);
 }
 
+// Listen to preview slot
 export function listenPreviewSlot(
   slot: number,
   cb: (payload: PreviewPayload) => void
 ) {
   const r = previewRef(slot);
-  const unsub = onValue(r, (snap) => cb((snap.exists() ? snap.val() : null) as PreviewPayload));
-  // Return an unsubscribe function
+  const unsub = onValue(r, (snap) =>
+    cb((snap.exists() ? (snap.val() as PreviewPayload) : null))
+  );
   return () => off(r);
 }
 
-export async function setLiveContent(payload: { html: string; meta?: any }) {
-  await set(liveRef, {
-    ...payload,
-    ts: serverTimestamp(),
-  });
+// Update current slide index for queued previews
+export async function setPreviewIndex(slot: number, index: number) {
+  await update(previewRef(slot), { index });
 }
 
-export function listenLiveContent(cb: (payload: { html: string; meta?: any } | null) => void) {
+// Set/Listen live content
+export async function setLiveContent(payload: { html: string; meta?: any }) {
+  await set(liveRef, { ...payload, ts: serverTimestamp() });
+}
+export function listenLiveContent(
+  cb: (payload: { html: string; meta?: any } | null) => void
+) {
   const unsub = onValue(liveRef, (snap) =>
-    cb((snap.exists() ? snap.val() : null) as any)
+    cb((snap.exists() ? (snap.val() as any) : null))
   );
   return () => off(liveRef);
 }
 
-// ---- Compatibility shims for older code ----
-/** Old name used somewhere; keep it working. */
-export const subscribeToLive = listenLiveContent;
+// Clear preview; if it's what's live, clear live too.
+export async function clearPreviewSlot(slot: number) {
+  // read live first
+  const liveSnap = await get(liveRef);
+  const liveVal = liveSnap.exists() ? (liveSnap.val() as any) : null;
 
-/** Some code imports `dbRef` from this module (aliasing `ref`). */
-export { ref as dbRef } from "firebase/database";
+  // clear the preview slot
+  await set(previewRef(slot), null);
 
-/** Upload an image and return a public URL (used by Slides panel). */
+  // if live is sourced from this slot, clear live too
+  if (liveVal?.meta?.fromPreview === slot) {
+    await set(liveRef, null);
+  }
+}
+
+// Optional: upload slide image to Storage (not required for current data-URL flow)
 export async function uploadSlideImage(file: Blob, filename?: string): Promise<string> {
-  const name =
-    filename ||
-    `slide-${Date.now()}-${Math.random().toString(36).slice(2)}.png`;
+  const name = filename || `slide-${Date.now()}-${Math.random().toString(36).slice(2)}.png`;
   const sref = storageRef(storage, `slides/${name}`);
   await uploadBytes(sref, file);
   return await getDownloadURL(sref);
