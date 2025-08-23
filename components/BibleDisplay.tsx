@@ -62,7 +62,7 @@ export default function BibleDisplay() {
 
   return (
     <div className="panel panel--bible">
-      <div className="panel-title">Bible</div>
+      <div className="panel-header">Bible</div>
 
       <div className="flex items-center gap-2 mb-2">
         <input
@@ -92,7 +92,8 @@ export default function BibleDisplay() {
         </button>
       </div>
 
-      <div className="preview-frame min-h-[160px] h-[200px]">
+      {/* scrolling preview area */}
+      <div className="preview-frame">
         {previewHtml ? (
           <div className="text-2xl leading-tight" dangerouslySetInnerHTML={{ __html: previewHtml }} />
         ) : (
