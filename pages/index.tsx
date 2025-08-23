@@ -19,15 +19,11 @@ function SimplePreviewCard({ slot, title, flavor }: { slot: number; title: strin
     '';
 
   return (
-    <div className={`panel panel--${flavor}`}>
+    <div className={`panel panel-${flavor} ${flavor === 'live' ? 'panel--live' : ''}`}>
       <div className="panel-header">{title}</div>
 
       <div className="preview-frame flex items-center justify-center">
-        {html ? (
-          <div className="w-full text-center leading-tight text-zinc-100" dangerouslySetInnerHTML={{ __html: html }} />
-        ) : (
-          <div className="text-zinc-400">Empty</div>
-        )}
+       <div className={`panel panel-${flavor} ${flavor === 'live' ? 'panel--live' : ''}`}>
       </div>
 
       <div className="flex items-center justify-between mt-3 gap-2">
