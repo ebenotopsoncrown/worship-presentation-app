@@ -20,11 +20,9 @@ function SimplePreviewCard({ slot, title, flavor }: { slot: number; title: strin
 
   return (
     <div className={`panel panel--${flavor}`}>
-      <div className="flex items-center justify-between mb-2">
-        <div className="panel-title">{title}</div>
-      </div>
+      <div className="panel-header">{title}</div>
 
-      <div className="preview-frame min-h-[180px] h-[220px] flex items-center justify-center">
+      <div className="preview-frame flex items-center justify-center">
         {html ? (
           <div className="w-full text-center leading-tight text-zinc-100" dangerouslySetInnerHTML={{ __html: html }} />
         ) : (
@@ -57,8 +55,8 @@ function LiveScreen() {
 
   return (
     <div className="panel panel--live h-full">
-      <div className="panel-title">Live</div>
-      <div className="bg-black/60 rounded-xl h-[220px] overflow-auto p-4 flex items-center justify-center">
+      <div className="panel-header">Live</div>
+      <div className="preview-frame flex items-center justify-center">
         {html ? (
           <div className="w-full text-center text-zinc-50 text-3xl md:text-4xl leading-tight" dangerouslySetInnerHTML={{ __html: html }} />
         ) : (
@@ -72,13 +70,16 @@ function LiveScreen() {
 export default function IndexPage() {
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 p-4 md:p-6 space-y-6">
+
       {/* PREVIEW AREA */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         <div className="lg:col-span-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Preview 1 -> queued controller (keeps your queue logic) */}
+            {/* Preview 1 (Queued) */}
             <div className="panel panel--p1">
-              {/* PreviewQueue renders its own body; we only wrap with a colored panel */}
+              {/* If your PreviewQueue renders its own header, keep it.
+                 If not, uncomment the next line to show the gradient header: */}
+              {/* <div className="panel-header">Preview 1 (Queued)</div> */}
               <PreviewQueue slot={1} title="Preview 1 (Queued)" />
             </div>
 
