@@ -1,7 +1,9 @@
-/* ---------- App theme (light-on-dark) ---------- */
+/* ---------- Theme ---------- */
 :root{
-  --bg: #0b0f19;           /* page */
-  --card: #0f1424;         /* panels base */
+  --bg: #0b0f19;
+  --card: #0f1424;
+
+  /* nice soft lighting per panel type */
   --panel1: radial-gradient(1200px 700px at -20% -10%, rgba(22,163,74,.12), transparent 50%),
             linear-gradient(180deg, #0f1424, #0f1528);
   --panel2: radial-gradient(1200px 700px at 120% -20%, rgba(59,130,246,.12), transparent 50%),
@@ -16,22 +18,19 @@
   --text: #e5e7eb;
   --muted: #94a3b8;
   --border: rgba(255,255,255,.08);
-  --ring: rgba(16,185,129,.35);   /* emerald ring focus */
+
+  /* unified content-frame height */
+  --frame-h: 260px;
 }
 
-/* Tailwind base (kept) */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Page base */
 html, body, #__next { height: 100%; }
-body{
-  background: var(--bg);
-  color: var(--text);
-}
+body{ background: var(--bg); color: var(--text); }
 
-/* ---------- Reusable UI primitives ---------- */
+/* ---------- Buttons ---------- */
 .btn{
   @apply inline-flex items-center justify-center rounded-lg px-3 py-2 text-sm font-semibold transition;
   border: 1px solid var(--border);
@@ -42,16 +41,13 @@ body{
 
 .btn-green{
   background: linear-gradient(90deg,#10b981,#059669);
-  color:#fff;
-  border: none;
+  color:#fff; border:none;
 }
 .btn-green:hover{ filter: brightness(1.05); }
-.btn-ghost{
-  background: rgba(255,255,255,.06);
-}
+.btn-ghost{ background: rgba(255,255,255,.06); }
 .btn-ghost:hover{ background: rgba(255,255,255,.1); }
 
-/* Panels */
+/* ---------- Panels ---------- */
 .panel{
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -59,25 +55,37 @@ body{
   box-shadow: 0 18px 36px rgba(0,0,0,.35);
   backdrop-filter: blur(8px);
 }
-.panel-title{
+
+/* colorful header like the app header */
+.panel-header{
+  background: linear-gradient(90deg,#ec4899 0%, #8b5cf6 45%, #2563eb 100%);
+  color: #fff;
   font-weight: 800;
   letter-spacing: .2px;
-  margin-bottom: 10px;
-  color: #f8fafc;
+  padding: 10px 12px;
+  margin: -8px -8px 12px;
+  border-radius: 10px;
+  display:flex; align-items:center; justify-content:space-between;
+  box-shadow: 0 8px 28px rgba(0,0,0,.25);
 }
 
-/* Color flavors per section */
 .panel--p1   { background: var(--panel1); }
 .panel--p2   { background: var(--panel2); }
 .panel--p3   { background: var(--panel3); }
 .panel--p4   { background: var(--panel4); }
 .panel--live { background: var(--panelLive); }
-
 .panel--hymns  { background: var(--panel1); }
 .panel--bible  { background: var(--panel2); }
 .panel--slides { background: var(--panel3); }
 
-/* Small helpers */
+/* unified scroll frame for any “preview area” */
+.preview-frame{
+  height: var(--frame-h);
+  overflow: auto;
+  @apply bg-black/40 rounded-xl p-3;
+}
+
+/* Inputs */
 .field{
   @apply rounded-md bg-zinc-800 px-3 py-2 outline-none;
   border: 1px solid rgba(255,255,255,.08);
@@ -86,14 +94,3 @@ body{
   @apply rounded-md bg-zinc-800 px-2 py-2 outline-none;
   border: 1px solid rgba(255,255,255,.08);
 }
-.kbd{ @apply rounded bg-white/10 px-1.5 py-0.5 text-xs; }
-
-/* Make text blocks inside preview readable */
-.preview-frame{
-  @apply bg-black/40 rounded-xl overflow-auto p-3;
-}
-
-/* Header button class shorthand */
-header .btn{ @apply px-3 py-1.5; }
-
-/* Keep your previous live/hymn helpers if you had them… */
