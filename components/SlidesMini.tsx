@@ -19,7 +19,7 @@ export default function SlidesMini() {
 
   return (
     <div className="panel panel--slides">
-      <div className="panel-title">Slides</div>
+      <div className="panel-header">Slides</div>
 
       <div className="flex flex-wrap items-center gap-2 mb-2">
         <input
@@ -38,11 +38,14 @@ export default function SlidesMini() {
         <button onClick={send} className="btn btn-green">Send to Preview</button>
       </div>
 
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        className="field w-full min-h-[120px]"
-      />
+      {/* make editor scroll if text grows */}
+      <div className="preview-frame">
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          className="w-full h-full bg-transparent outline-none resize-none"
+        />
+      </div>
     </div>
   );
 }
