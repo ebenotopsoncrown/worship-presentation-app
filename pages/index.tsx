@@ -3,9 +3,15 @@ import PreviewQueue from '../components/PreviewQueue';
 import HymnDisplay from '../components/HymnDisplay';
 import BibleDisplay from '../components/BibleDisplay';
 import SlidesMini from '../components/SlidesMini';
-import { listenPreviewSlot, setLiveContent, clearPreviewSlot, PreviewPayload } from '../utils/firebase';
+import {
+  listenPreviewSlot,
+  setLiveContent,
+  clearPreviewSlot,
+  type PreviewPayload,
+} from '../utils/firebase';
 
-function SimplePreviewCard({ slot, title, flavor }: { slot: number; title: string; flavor: 'p2'|'p3'|'p4' }) {
+/** A simple card that shows whatever is currently in a preview slot. */
+function SimplePreviewCard({ slot, title }: { slot: number; title: string }) {
   const [payload, setPayload] = React.useState<PreviewPayload>(null);
 
   React.useEffect(() => {
@@ -13,70 +19,70 @@ function SimplePreviewCard({ slot, title, flavor }: { slot: number; title: strin
     return () => off();
   }, [slot]);
 
+  // Slide-first; fall back to html.
   const html =
     (payload && (payload as any).slides && (payload as any).slides[(payload as any).index ?? 0]) ||
     (payload && (payload as any).html) ||
     '';
 
   return (
-  <div className={`panel panel-${flavor} ${flavor === 'live' ? 'panel--live' : ''}`}>
-    <div className="panel-header">{title}</div>
+    <div className="bg-zinc-900 rounded-2xl p-4 shadow-inner border border-zinc-800">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-zinc-200 font-semibold">{title}</div>
+      </div>
 
-    <div className="preview-frame flex items-center justify-center">
-      {html ? (
-        <div
-          className={`w-full text-center leading-tight text-zinc-100 ${
-            flavor === 'live' ? 'live-html' : ''
-          }`}
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
-      ) : (
-        <div className="text-zinc-400">Empty</div>
-      )}
+      <div className="bg-black/40 rounded-xl min-h-[180px] h-[220px] overflow-auto flex items-center justify-center p-4">
+        {html ? (
+          <div
+            className="w-full text-center leading-tight text-zinc-100"
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        ) : (
+          <div className="text-zinc-500">Empty</div>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between mt-3 gap-2">
+        <button
+          onClick={() => clearPreviewSlot(slot)}
+          className="px-3 py-1.5 text-sm rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200"
+        >
+          Clear
+        </button>
+        <button
+          onClick={() => html && setLiveContent({ html, meta: { fromPreview: slot } })}
+          className="px-3 py-1.5 text-sm rounded bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 text-white"
+          disabled={!html}
+        >
+          Go Live
+        </button>
+      </div>
     </div>
+  );
+}
 
-    <div className="flex items-center justify-between mt-3 gap-2">
-      <button
-        onClick={() => clearPreviewSlot(slot)}
-        className="btn btn-ghost"
-      >
-        Clear
-      </button>
-
-      <button
-        onClick={() =>
-          html && setLiveContent({ html, meta: { fromPreview: slot } })
-        }
-        className="btn btn-green"
-        disabled={!html}
-      >
-        Go Live
-      </button>
-    </div>
-  </div>
-);
-
-
+/** Shows the current live output. */
 function LiveScreen() {
   const [html, setHtml] = React.useState<string>('');
 
   React.useEffect(() => {
+    // simple listener for live_content
     const { listenLiveContent } = require('../utils/firebase');
     const off = listenLiveContent((v: any) => setHtml(v?.html || ''));
     return () => off();
   }, []);
 
   return (
-    <div className="panel panel--live h-full">
-      <div className="panel-header">Live</div>
-      <div className="preview-frame flex items-center justify-center">
+    <div className="bg-zinc-900 rounded-2xl p-4 shadow-inner border border-zinc-800 h-full">
+      <div className="text-zinc-200 font-semibold mb-2">Live</div>
+      <div className="bg-black/60 rounded-xl h-[220px] overflow-auto p-4 flex items-center justify-center">
         {html ? (
           <div
             className="w-full text-center text-zinc-50 text-3xl md:text-4xl leading-tight"
             dangerouslySetInnerHTML={{ __html: html }}
           />
         ) : (
-          <div className="text-zinc-400">Nothing live</div>
+          <div className="text-zinc-500">Nothing live</div>
         )}
       </div>
     </div>
@@ -86,38 +92,38 @@ function LiveScreen() {
 export default function IndexPage() {
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 p-4 md:p-6 space-y-6">
-
-      {/* PREVIEW + LIVE AREA */}
-      {/* lg: 5 cols (previews 3, live 2)  |  xl: 7 cols (previews 4, live 3) */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 xl:grid-cols-7 gap-6">
-        {/* Previews block (narrower than before) */}
-        <div className="lg:col-span-3 xl:col-span-4">
+      {/* PREVIEW AREA */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        <div className="lg:col-span-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Preview 1 (Queued) wrapped in panel for consistent look */}
-            <div className="panel panel--p1">
-              {/* If PreviewQueue already renders its own header, keep it.
-                  Otherwise uncomment next line: */}
-              {/* <div className="panel-header">Preview 1 (Queued)</div> */}
-              <PreviewQueue slot={1} title="Preview 1 (Queued)" />
-            </div>
-
-            <SimplePreviewCard slot={2} title="Preview 2" flavor="p2" />
-            <SimplePreviewCard slot={3} title="Preview 3" flavor="p3" />
-            <SimplePreviewCard slot={4} title="Preview 4" flavor="p4" />
+            {/* Preview 1 – queued controller */}
+            <PreviewQueue slot={1} title="Preview 1 (Queued)" />
+            {/* Preview 2 */}
+            <SimplePreviewCard slot={2} title="Preview 2" />
+            {/* Preview 3 */}
+            <SimplePreviewCard slot={3} title="Preview 3" />
+            {/* Preview 4 */}
+            <SimplePreviewCard slot={4} title="Preview 4" />
           </div>
         </div>
 
-        {/* Live block (wider than before) */}
-        <div className="lg:col-span-2 xl:col-span-3">
+        {/* Live */}
+        <div className="lg:col-span-1">
           <LiveScreen />
         </div>
       </div>
 
       {/* CONTENT PANELS */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <HymnDisplay />
-        <BibleDisplay />
-        <SlidesMini />
+        <div className="xl:col-span-1">
+          <HymnDisplay />
+        </div>
+        <div className="xl:col-span-1">
+          <BibleDisplay />
+        </div>
+        <div className="xl:col-span-1">
+          <SlidesMini />
+        </div>
       </div>
     </div>
   );
