@@ -5,7 +5,7 @@ import BibleDisplay from '../components/BibleDisplay';
 import SlidesMini from '../components/SlidesMini';
 import { listenPreviewSlot, setLiveContent, clearPreviewSlot, PreviewPayload } from '../utils/firebase';
 
-function SimplePreviewCard({ slot, title }: { slot: number; title: string }) {
+function SimplePreviewCard({ slot, title, flavor }: { slot: number; title: string; flavor: 'p2'|'p3'|'p4' }) {
   const [payload, setPayload] = React.useState<PreviewPayload>(null);
 
   React.useEffect(() => {
@@ -19,32 +19,24 @@ function SimplePreviewCard({ slot, title }: { slot: number; title: string }) {
     '';
 
   return (
-    <div className="bg-zinc-900 rounded-2xl p-4 shadow-inner border border-zinc-800">
+    <div className={`panel panel--${flavor}`}>
       <div className="flex items-center justify-between mb-2">
-        <div className="text-zinc-200 font-semibold">{title}</div>
+        <div className="panel-title">{title}</div>
       </div>
 
-      <div className="bg-black/40 rounded-xl min-h-[180px] h-[220px] overflow-auto flex items-center justify-center p-4">
+      <div className="preview-frame min-h-[180px] h-[220px] flex items-center justify-center">
         {html ? (
-          <div
-            className="w-full text-center leading-tight text-zinc-100"
-            dangerouslySetInnerHTML={{ __html: html }}
-          />
+          <div className="w-full text-center leading-tight text-zinc-100" dangerouslySetInnerHTML={{ __html: html }} />
         ) : (
-          <div className="text-zinc-500">Empty</div>
+          <div className="text-zinc-400">Empty</div>
         )}
       </div>
 
       <div className="flex items-center justify-between mt-3 gap-2">
-        <button
-          onClick={() => clearPreviewSlot(slot)}
-          className="px-3 py-1.5 text-sm rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200"
-        >
-          Clear
-        </button>
+        <button onClick={() => clearPreviewSlot(slot)} className="btn btn-ghost">Clear</button>
         <button
           onClick={() => html && setLiveContent({ html, meta: { fromPreview: slot } })}
-          className="px-3 py-1.5 text-sm rounded bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 text-white"
+          className="btn btn-green"
           disabled={!html}
         >
           Go Live
@@ -56,27 +48,21 @@ function SimplePreviewCard({ slot, title }: { slot: number; title: string }) {
 
 function LiveScreen() {
   const [html, setHtml] = React.useState<string>('');
+
   React.useEffect(() => {
-    const off = listenPreviewSlot(0, () => {}); // no-op, keeps types quiet
-    return () => off();
-  }, []);
-  React.useEffect(() => {
-    // simple listener for live_content
     const { listenLiveContent } = require('../utils/firebase');
-    const off = listenLiveContent((v) => setHtml(v?.html || ''));
+    const off = listenLiveContent((v: any) => setHtml(v?.html || ''));
     return () => off();
   }, []);
+
   return (
-    <div className="bg-zinc-900 rounded-2xl p-4 shadow-inner border border-zinc-800 h-full">
-      <div className="text-zinc-200 font-semibold mb-2">Live</div>
+    <div className="panel panel--live h-full">
+      <div className="panel-title">Live</div>
       <div className="bg-black/60 rounded-xl h-[220px] overflow-auto p-4 flex items-center justify-center">
         {html ? (
-          <div
-            className="w-full text-center text-zinc-50 text-3xl md:text-4xl leading-tight"
-            dangerouslySetInnerHTML={{ __html: html }}
-          />
+          <div className="w-full text-center text-zinc-50 text-3xl md:text-4xl leading-tight" dangerouslySetInnerHTML={{ __html: html }} />
         ) : (
-          <div className="text-zinc-500">Nothing live</div>
+          <div className="text-zinc-400">Nothing live</div>
         )}
       </div>
     </div>
@@ -90,16 +76,18 @@ export default function IndexPage() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         <div className="lg:col-span-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Preview 1 -> queued controller */}
-            <PreviewQueue slot={1} title="Preview 1 (Queued)" />
-            {/* Preview 2 */}
-            <SimplePreviewCard slot={2} title="Preview 2" />
-            {/* Preview 3 */}
-            <SimplePreviewCard slot={3} title="Preview 3" />
-            {/* Preview 4 */}
-            <SimplePreviewCard slot={4} title="Preview 4" />
+            {/* Preview 1 -> queued controller (keeps your queue logic) */}
+            <div className="panel panel--p1">
+              {/* PreviewQueue renders its own body; we only wrap with a colored panel */}
+              <PreviewQueue slot={1} title="Preview 1 (Queued)" />
+            </div>
+
+            <SimplePreviewCard slot={2} title="Preview 2" flavor="p2" />
+            <SimplePreviewCard slot={3} title="Preview 3" flavor="p3" />
+            <SimplePreviewCard slot={4} title="Preview 4" flavor="p4" />
           </div>
         </div>
+
         <div className="lg:col-span-1">
           <LiveScreen />
         </div>
@@ -107,15 +95,9 @@ export default function IndexPage() {
 
       {/* CONTENT PANELS */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-1">
-          <HymnDisplay />
-        </div>
-        <div className="xl:col-span-1">
-          <BibleDisplay />
-        </div>
-        <div className="xl:col-span-1">
-          <SlidesMini />
-        </div>
+        <HymnDisplay />
+        <BibleDisplay />
+        <SlidesMini />
       </div>
     </div>
   );
