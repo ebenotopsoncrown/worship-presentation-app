@@ -3,9 +3,18 @@ import { setPreviewSlot } from '../utils/firebase';
 
 type Verse = { v: number; t: string };
 
+const verMap: Record<string, string> = {
+  KJV: 'kjv',
+  WEB: 'web',
+};
+
 async function fetchVerses(ref: string, ver: string): Promise<{ ref: string; verses: Verse[] }> {
-  const res = await fetch(`/api/bible?ref=${encodeURIComponent(ref)}&ver=${encodeURIComponent(ver)}`);
-  if (!res.ok) throw new Error('Failed to load passage');
+  const v = verMap[ver] || ver.toLowerCase();
+  const res = await fetch(`/api/bible?ref=${encodeURIComponent(ref)}&ver=${encodeURIComponent(v)}`);
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`Bible API error (${res.status}) ${txt}`);
+  }
   return res.json();
 }
 
@@ -27,19 +36,25 @@ export default function BibleDisplay() {
   const [slot, setSlot] = React.useState<number>(1);
   const [loading, setLoading] = React.useState(false);
   const [previewHtml, setPreviewHtml] = React.useState<string>('');
+  const [error, setError] = React.useState<string>('');
 
   const preview = async () => {
+    setError('');
     try {
       setLoading(true);
       const data = await fetchVerses(refTxt, ver);
       const slides = versesToSlides(data.ref, data.verses);
       setPreviewHtml(slides[0] ?? '');
+    } catch (e: any) {
+      setError(e?.message || 'Failed to load passage.');
+      setPreviewHtml('');
     } finally {
       setLoading(false);
     }
   };
 
   const send = async () => {
+    setError('');
     try {
       setLoading(true);
       const data = await fetchVerses(refTxt, ver);
@@ -55,6 +70,8 @@ export default function BibleDisplay() {
         const whole = slides.join('<!-- slide -->');
         await setPreviewSlot(slot, { html: whole, meta: { type: 'bible', ref: data.ref, ver } });
       }
+    } catch (e: any) {
+      setError(e?.message || 'Failed to send to preview.');
     } finally {
       setLoading(false);
     }
@@ -76,7 +93,7 @@ export default function BibleDisplay() {
           <option value="WEB">WEB</option>
         </select>
         <button onClick={preview} className="btn btn-green" disabled={loading}>
-          Preview
+          {loading ? 'Loading…' : 'Preview'}
         </button>
       </div>
 
@@ -88,12 +105,12 @@ export default function BibleDisplay() {
           <option value={4}>Preview 4</option>
         </select>
         <button onClick={send} className="btn btn-green" disabled={loading}>
-          Send to Preview
+          {loading ? 'Sending…' : 'Send to Preview'}
         </button>
       </div>
 
-      {/* scrolling preview area */}
       <div className="preview-frame">
+        {error && <div className="text-red-400 text-sm mb-2">{error}</div>}
         {previewHtml ? (
           <div className="text-2xl leading-tight" dangerouslySetInnerHTML={{ __html: previewHtml }} />
         ) : (
