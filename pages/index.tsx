@@ -6,8 +6,6 @@ import PreviewQueue from '../components/PreviewQueue';
 import HymnDisplay from '../components/HymnDisplay';
 import BibleDisplay from '../components/BibleDisplay';
 import SlidesMini from '../components/SlidesMini';
-import {
-
   
  type PreviewPanelProps = {
   title: string;
