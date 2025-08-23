@@ -22,7 +22,6 @@ export default function HymnDisplay() {
   const [slot, setSlot] = React.useState<number>(1);
   const [selected, setSelected] = React.useState<Hymn | null>(null);
 
-  // Load hymn library from Firebase (/hymn_library)
   React.useEffect(() => {
     const { db, ref, onValue } = require('../utils/firebase');
     const r = ref(db, 'hymn_library');
@@ -46,7 +45,7 @@ export default function HymnDisplay() {
 
   const send = async () => {
     if (!selected) return;
-    // Build slides per stanza (1 stanza per slide)
+
     const versesArray = Array.isArray(selected.verses?.[0])
       ? (selected.verses as string[][])
       : (selected.verses as string[]).map((v) => [v]);
@@ -78,7 +77,7 @@ export default function HymnDisplay() {
 
   return (
     <div className="panel panel--hymns">
-      <div className="panel-title">Hymns</div>
+      <div className="panel-header">Hymns</div>
 
       <div className="flex items-center gap-2 mb-2">
         <input
@@ -87,11 +86,7 @@ export default function HymnDisplay() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        <select
-          className="select"
-          value={slot}
-          onChange={(e) => setSlot(parseInt(e.target.value, 10))}
-        >
+        <select className="select" value={slot} onChange={(e) => setSlot(parseInt(e.target.value, 10))}>
           <option value={1}>Preview 1</option>
           <option value={2}>Preview 2</option>
           <option value={3}>Preview 3</option>
@@ -103,8 +98,8 @@ export default function HymnDisplay() {
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        {/* results */}
-        <div className="preview-frame h-[220px]">
+        {/* results list with scroll */}
+        <div className="preview-frame">
           {!results.length ? (
             <div className="text-zinc-400 text-sm">No hymns match “{q}”.</div>
           ) : (
@@ -128,8 +123,8 @@ export default function HymnDisplay() {
           )}
         </div>
 
-        {/* preview of selected hymn */}
-        <div className="preview-frame h-[220px]">
+        {/* hymn preview area with scroll */}
+        <div className="preview-frame">
           {selected ? (
             <>
               <div className="text-sm opacity-70 mb-1">
