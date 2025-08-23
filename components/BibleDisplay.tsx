@@ -15,9 +15,7 @@ function versesToSlides(ref: string, verses: Verse[], per = 2) {
   for (let i = 0; i < verses.length; i += per) {
     const group = verses.slice(i, i + per);
     const head = `<div style="font-size:1rem;opacity:.7;margin-bottom:.25rem">${ref}</div>`;
-    const body = group
-      .map((v) => `<span style="opacity:.7;font-size:1rem">${v.v}</span> ${v.t}`)
-      .join('<br/>');
+    const body = group.map((v) => `<span style="opacity:.7;font-size:1rem">${v.v}</span> ${v.t}`).join('<br/>');
     slides.push(mk(head + body));
   }
   return slides;
@@ -54,7 +52,6 @@ export default function BibleDisplay() {
           meta: { type: 'bible', ref: data.ref, ver },
         });
       } else {
-        // collapse slides to a single html payload separated by explicit slide markers (for future splitting, if desired)
         const whole = slides.join('<!-- slide -->');
         await setPreviewSlot(slot, { html: whole, meta: { type: 'bible', ref: data.ref, ver } });
       }
@@ -64,61 +61,42 @@ export default function BibleDisplay() {
   };
 
   return (
-    <div className="bg-zinc-900 rounded-2xl p-4 shadow-inner border border-zinc-800">
-      <div className="text-zinc-200 font-semibold mb-3">Bible</div>
+    <div className="panel panel--bible">
+      <div className="panel-title">Bible</div>
 
       <div className="flex items-center gap-2 mb-2">
         <input
-          className="w-full bg-zinc-800 rounded px-3 py-2 outline-none"
+          className="field w-full"
           placeholder="John 3:16-18"
           value={refTxt}
           onChange={(e) => setRefTxt(e.target.value)}
         />
-        <select
-          className="bg-zinc-800 rounded px-2 py-2"
-          value={ver}
-          onChange={(e) => setVer(e.target.value as any)}
-        >
+        <select className="select" value={ver} onChange={(e) => setVer(e.target.value as any)}>
           <option value="KJV">KJV</option>
           <option value="WEB">WEB</option>
         </select>
-        <button
-          onClick={preview}
-          className="px-3 py-2 rounded bg-zinc-800 hover:bg-zinc-700"
-          disabled={loading}
-        >
+        <button onClick={preview} className="btn btn-green" disabled={loading}>
           Preview
         </button>
       </div>
 
       <div className="flex items-center gap-2 mb-3">
-        <select
-          className="bg-zinc-800 rounded px-2 py-2"
-          value={slot}
-          onChange={(e) => setSlot(parseInt(e.target.value, 10))}
-        >
+        <select className="select" value={slot} onChange={(e) => setSlot(parseInt(e.target.value, 10))}>
           <option value={1}>Preview 1</option>
           <option value={2}>Preview 2</option>
           <option value={3}>Preview 3</option>
           <option value={4}>Preview 4</option>
         </select>
-        <button
-          onClick={send}
-          className="px-3 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white disabled:bg-zinc-700"
-          disabled={loading}
-        >
+        <button onClick={send} className="btn btn-green" disabled={loading}>
           Send to Preview
         </button>
       </div>
 
-      <div className="bg-black/40 rounded-xl min-h-[160px] h-[200px] overflow-auto p-3">
+      <div className="preview-frame min-h-[160px] h-[200px]">
         {previewHtml ? (
-          <div
-            className="text-2xl leading-tight"
-            dangerouslySetInnerHTML={{ __html: previewHtml }}
-          />
+          <div className="text-2xl leading-tight" dangerouslySetInnerHTML={{ __html: previewHtml }} />
         ) : (
-          <div className="text-zinc-500 text-sm">Click Preview to load the passage…</div>
+          <div className="text-zinc-400 text-sm">Click Preview to load the passage…</div>
         )}
       </div>
     </div>
