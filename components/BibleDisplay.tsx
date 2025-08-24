@@ -1,27 +1,121 @@
-// pages/api/bible.ts
-import type { NextApiRequest, NextApiResponse } from 'next';
+'use client';
+import React from 'react';
+import { setPreviewSlot } from '../utils/firebase';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const q = (req.query.q ?? '').toString().trim();
-  const ver = ((req.query.ver ?? 'kjv') as string).toLowerCase();
+type Verse = { v: number; t: string };
+type ApiOk = { ref: string; verses: Verse[] };
+type ApiErr = { error?: string };
 
-  if (!q) return res.status(400).json({ error: 'Missing q (Bible reference)' });
+/** utils */
+const toHtml = (ref: string, verses: Verse[]) => {
+  const body = verses.map((v) => `<span class="opacity-60 mr-2">${v.v}</span>${v.t}`).join('<br/>');
+  return `
+    <div style="font-size:.95rem;opacity:.8;margin-bottom:.25rem">${ref}</div>
+    <div style="font-size:2.6rem;line-height:1.25">${body}</div>`;
+};
 
-  try {
-    // Example public API; keep your existing source if you already have one
-    const url = `https://bible-api.com/${encodeURIComponent(q)}?translation=${encodeURIComponent(ver)}`;
-    const r = await fetch(url);
-    if (!r.ok) {
-      const txt = await r.text().catch(() => '');
-      return res.status(r.status).send(txt || 'Failed to fetch verses');
+export default function BibleDisplay() {
+  const [refText, setRefText] = React.useState('John 3:16-18');
+  const [ver, setVer] = React.useState('KJV');
+  const [slot, setSlot] = React.useState(1);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [previewHtml, setPreviewHtml] = React.useState<string>('');
+
+  const preview = async () => {
+    setError(null);
+    setPreviewHtml('');
+    const q = refText.trim();
+    if (!q) {
+      setError('Please enter a Bible reference.');
+      return;
     }
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/bible?q=${encodeURIComponent(q)}&ver=${encodeURIComponent(ver)}`);
+      const data = (await r.json()) as ApiOk & ApiErr;
+      if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
+      const verses = Array.isArray(data?.verses) ? data.verses : [];
+      setPreviewHtml(toHtml(data.ref || q, verses));
+    } catch (e: any) {
+      setError(e?.message || 'Failed to load verses');
+    } finally {
+      setBusy(false);
+    }
+  };
 
-    const data = await r.json();
-    const ref = data?.reference || q;
-    const verses = (data?.verses ?? []).map((v: any) => ({ v: v?.verse, t: (v?.text ?? '').trim() }));
+  const send = async () => {
+    if (!previewHtml) return;
+    await setPreviewSlot(slot, {
+      html: previewHtml,
+      meta: { type: 'bible', reference: refText, version: ver },
+    });
+  };
 
-    return res.status(200).json({ ref, verses });
-  } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Bible fetch failed' });
-  }
+  return (
+    <div className="panel panel--bible h-[520px] flex flex-col">
+      <div className="panel-header">Bible</div>
+
+      <div className="flex items-center gap-2 mb-2">
+        <input
+          value={refText}
+          onChange={(e) => setRefText(e.target.value)}
+          className="w-full bg-zinc-800 rounded px-3 py-2 outline-none"
+          placeholder="e.g., John 3:16-18"
+        />
+
+        <select
+          className="bg-zinc-800 rounded px-2 py-2"
+          value={ver}
+          onChange={(e) => setVer(e.target.value)}
+        >
+          <option>KJV</option>
+          <option>NIV</option>
+          <option>ESV</option>
+          <option>NKJV</option>
+        </select>
+
+        <button
+          onClick={preview}
+          disabled={busy}
+          className="px-3 py-2 rounded bg-zinc-700 hover:bg-zinc-600 text-white disabled:opacity-50"
+        >
+          Preview
+        </button>
+
+        <select
+          className="bg-zinc-800 rounded px-2 py-2"
+          value={slot}
+          onChange={(e) => setSlot(parseInt(e.target.value, 10))}
+        >
+          <option value={1}>Preview 1</option>
+          <option value={2}>Preview 2</option>
+          <option value={3}>Preview 3</option>
+          <option value={4}>Preview 4</option>
+        </select>
+
+        <button
+          onClick={send}
+          disabled={!previewHtml || busy}
+          className="px-3 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white disabled:bg-zinc-700"
+        >
+          Send to Preview
+        </button>
+      </div>
+
+      {/* equal-height content area */}
+      <div className="bg-black/40 rounded-xl flex-1 min-h-0 overflow-auto p-4">
+        {error ? (
+          <div className="text-rose-400">{error}</div>
+        ) : previewHtml ? (
+          <div
+            className="text-zinc-50"
+            dangerouslySetInnerHTML={{ __html: previewHtml }}
+          />
+        ) : (
+          <div className="text-zinc-500">Click Preview to load the passage…</div>
+        )}
+      </div>
+    </div>
+  );
 }
