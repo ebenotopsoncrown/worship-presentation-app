@@ -1,94 +1,92 @@
-// utils/firebase.ts  — modular Firebase ONLY (no compat)
-// This file centralizes all Firebase initialization and exports.
-
-import { initializeApp } from 'firebase/app';
+// utils/firebase.ts
+import { getApp, getApps, initializeApp } from "firebase/app";
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail,
+  signOut,
+} from "firebase/auth";
 import {
   getDatabase,
-  ref as dbRef,
+  ref as rtdbRef,
   onValue,
   off,
   set,
   update,
-  remove,
   push,
-  child,
-  type DatabaseReference,
-} from 'firebase/database';
-import {
-  getAuth,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  sendPasswordResetEmail,
-  signOut,
-} from 'firebase/auth';
+  DatabaseReference,
+} from "firebase/database";
 import {
   getStorage,
-  ref as fileRef,
+  ref as storageRef,
   uploadBytes,
   getDownloadURL,
   deleteObject,
-  ref as storageRef,          // alias for clarity
-  refFromURL as storageRefFromURL,
-} from 'firebase/storage';
+} from "firebase/storage";
 
-// ───────────────────────────────────────────────────────────────────────────────
-// Keep YOUR existing config values here (env or inline). The keys must be the same.
+/**
+ * Read all config from env. Add NEXT_PUBLIC_FIREBASE_DATABASE_URL in Vercel.
+ * (Find it in Firebase console → Realtime Database → Data → Instance URL)
+ */
+const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+const databaseURL =
+  process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL ||
+  (projectId
+    ? // fallback if you didn’t set DATABASE_URL env
+      // you can use .firebasedatabase.app or .firebaseio.com; both work
+      `https://${projectId}-default-rtdb.firebaseio.com`
+    : undefined);
+
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FB_API_KEY!,
-  authDomain: process.env.NEXT_PUBLIC_FB_AUTH_DOMAIN!,
-  databaseURL: process.env.NEXT_PUBLIC_FB_DB_URL!,
-  projectId: process.env.NEXT_PUBLIC_FB_PROJECT_ID!,
-  storageBucket: process.env.NEXT_PUBLIC_FB_STORAGE!,
-  messagingSenderId: process.env.NEXT_PUBLIC_FB_SENDER_ID!,
-  appId: process.env.NEXT_PUBLIC_FB_APP_ID!,
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  databaseURL, // <- important for SSR/build
 };
-// ───────────────────────────────────────────────────────────────────────────────
 
-export const app = initializeApp(firebaseConfig);
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-// Core services (singletons)
-export const db = getDatabase(app);
-export const auth = getAuth(app);
-export const storage = getStorage(app);
+// Services
+const auth = getAuth(app);
+const db = getDatabase(app, databaseURL);
+const storage = getStorage(app);
 
-// Re-export the DB helpers so callers import only from this file
-export {
-  dbRef, onValue, off, set, update, remove, push, child,
-  type DatabaseReference,
-};
-export { onAuthStateChanged, signInWithEmailAndPassword, sendPasswordResetEmail, signOut };
+/** ---------------------------
+ * Realtime Database helpers
+ * --------------------------*/
 
-// Convenience paths/refs used around the app
-export const previewPath = (slot: number) => `preview/${slot}`;
-export const livePath = 'live';
+// keep the symbol name `ref` because your pages import it as { ref }
+export const ref = (path: string): DatabaseReference => rtdbRef(db, path);
+// also export dbRef for any places that import that name
+export const dbRef = (path: string): DatabaseReference => rtdbRef(db, path);
 
-export const previewRef = (slot: number) => dbRef(db, previewPath(slot));
-export const liveRef = () => dbRef(db, livePath);
+// pass-through ops your code already uses
+export { onValue, off, set, update, push };
 
-// ───────────────────────────────────────────────────────────────────────────────
-// Slides (Storage) helpers
-//  - uploadSlideImage(file) -> returns public URL
-//  - deleteSlideByUrl(url)  -> best-effort delete from Storage
+/** App-specific paths/helpers used around the UI */
+export const previewRef = (slot: number) => rtdbRef(db, `previews/${slot}`);
+export const liveRef = () => rtdbRef(db, "live");
+export const previewSlotRef = () => rtdbRef(db, "ui/previewSlot");
 
-export async function uploadSlideImage(file: File, folder = 'slides'): Promise<string> {
-  const safeName = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
-  const r = fileRef(storage, `${folder}/${safeName}`);
-  await uploadBytes(r, file);
-  return await getDownloadURL(r);
-}
+/** Some parts of the UI import this; make it write the chosen slot */
+export const setPreviewSlot = async (slot: number) => set(previewSlotRef(), slot);
 
-export async function deleteSlideByUrl(url: string): Promise<void> {
-  try {
-    const r = storageRefFromURL(url);
-    await deleteObject(r);
-  } catch {
-    // ignore—URL may be external or already deleted
-  }
-}
+/** ---------------------------
+ * Storage helpers
+ * --------------------------*/
 
-// Optional small wrapper to keep old call sites working if any existed:
-export function subscribeToLive(cb: (val: any) => void): () => void {
-  const r = liveRef();
-  const unsubscribe = onValue(r, (snap) => cb(snap.val()));
-  return () => off(r);
-}
+// Wrapper so you don’t need to import (nonexistent) refFromURL
+export const storageRefFromURL = (urlOrPath: string) => storageRef(storage, urlOrPath);
+export const storageRootRef = (path = "") => storageRef(storage, path);
+export { uploadBytes, getDownloadURL, deleteObject };
+
+/** ---------------------------
+ * Auth helpers (used in Login)
+ * --------------------------*/
+export { auth, signInWithEmailAndPassword, sendPasswordResetEmail, signOut };
+
+// default export in case anything else expects it
+export default app;
