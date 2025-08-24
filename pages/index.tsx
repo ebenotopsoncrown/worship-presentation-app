@@ -42,8 +42,8 @@ const pickHtml = (snap: any): { html: string; meta?: any } => {
 };
 
 /** Firebase paths */
-const previewPath = (slot: number) => `previews/${slot}`;
-const livePath = `live`;
+const previewPath = (slot: number) => `preview_slots/slot${slot}`;
+const livePath = `live_content`;
 
 /** A small preview/live card (keeps your dark theme classes) */
 type CardProps = {
