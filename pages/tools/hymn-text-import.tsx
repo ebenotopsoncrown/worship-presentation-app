@@ -1,190 +1,271 @@
 // pages/tools/hymn-text-import.tsx
-'use client';
-import React from 'react';
-import { ref, onValue, set } from '../../utils/firebase';
+import React, { useMemo, useRef, useState } from "react";
+import Script from "next/script";
 
-type Hymn = {
-  id: string;
-  number?: number;
+// Minimal styling that matches your app tone a bit
+const Box: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+  <div className="rounded-2xl bg-[#0d0f16] border border-zinc-800/60 p-4 shadow-lg">
+    <div className="text-sm font-semibold bg-gradient-to-r from-fuchsia-500 to-indigo-500 bg-clip-text text-transparent">
+      {title}
+    </div>
+    <div className="mt-3">{children}</div>
+  </div>
+);
+
+type ImportedHymn = {
+  number: number;      // 1-based
   title: string;
-  firstLine: string;
-  verses: string[][];
-  chorus?: string[];
-  searchTokens?: string[];
+  verses: string[];    // each item = a verse (joined lines)
 };
-type Library = Record<string, Hymn>;
 
-function slug(s: string) {
-  return String(s || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-function tokenise(s: string) {
-  return String(s || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .split(' ')
-    .filter(Boolean);
-}
-function looksLikeTitle(line: string) {
-  const t = line.trim();
-  if (!t) return false;
-  if (/^chorus\b/i.test(t)) return false;
-  const words = t.split(/\s+/);
-  const longWords = words.filter((w) => w.length >= 3).length;
-  const punct = /[.:,;!?]/.test(t);
-  const titleCaseish = words.filter((w) => /^[A-Z]/.test(w)).length >= Math.ceil(words.length * 0.6);
-  return longWords >= 2 && !punct && titleCaseish;
+declare global {
+  interface Window {
+    mammoth?: any;
+  }
 }
 
-export default function HymnTextImport() {
-  const [count, setCount] = React.useState<number | null>(null);
-  const [msg, setMsg] = React.useState<string>('');
-  const [busy, setBusy] = React.useState(false);
-  const [preview, setPreview] = React.useState<Library | null>(null);
+export default function HymnTextImportPage() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hymns, setHymns] = useState<ImportedHymn[]>([]);
+  const [rawPreview, setRawPreview] = useState<string>("");
 
-  React.useEffect(() => {
-    const off = onValue(ref('hymn_library'), (snap) => {
-      const v = snap.val();
-      setCount(v ? Object.keys(v).length : 0);
-    });
-    return () => off();
-  }, []);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    const text = await f.text();
-    const lib = parseTextToLibrary(text);
-    setPreview(lib);
-    setMsg(`Parsed ${Object.keys(lib).length} hymns from text. Click "Replace library" to upload.`);
-  };
+  const parsedCount = hymns.length;
 
-  const upload = async () => {
-    if (!preview) { setMsg('Pick a .txt file first.'); return; }
-    setBusy(true);
+  const sample = useMemo(() => hymns.slice(0, 5), [hymns]);
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setError(null);
+    setHymns([]);
+    setRawPreview("");
+
+    const file = e.target.files?.[0];
+    if (!file) return;
+
     try {
-      await set(ref('hymn_library'), preview);
-      setMsg(`✅ Replaced hymn_library with ${Object.keys(preview).length} hymns.`);
-    } catch (e: any) {
-      setMsg(`Upload failed: ${e?.message || e}`);
+      if (!window.mammoth) {
+        setError("Mammoth script not yet loaded. Please wait a second and try again.");
+        return;
+      }
+
+      setBusy(true);
+
+      // Read file as ArrayBuffer in the browser
+      const arrayBuffer = await file.arrayBuffer();
+
+      // Convert to HTML and preserve Heading 1 / 2 so we can detect titles
+      const options = {
+        styleMap: [
+          "p[style-name='Heading 1'] => h1:fresh",
+          "p[style-name='Heading 2'] => h2:fresh",
+        ],
+      };
+      const { value: html } = await window.mammoth.convertToHtml(
+        { arrayBuffer },
+        options
+      );
+
+      // Keep a tiny preview of the raw HTML (helpful if parsing needs tweaking)
+      setRawPreview(html.slice(0, 5000));
+
+      const parsed = parseHymnsFromHtml(html);
+      setHymns(parsed);
+    } catch (err: any) {
+      setError(err?.message ?? String(err));
     } finally {
       setBusy(false);
     }
-  };
-
-  return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-6 space-y-4">
-      <h1 className="text-2xl font-bold">Hymn Import (TXT, no Node required)</h1>
-      <p className="text-sm text-zinc-400">
-        Current hymns in DB: <strong>{count ?? '…'}</strong>
-      </p>
-
-      <div className="flex items-center gap-3">
-        <input
-          type="file"
-          accept=".txt,text/plain"
-          onChange={handleFile}
-          className="file:mr-3 file:py-2 file:px-3 file:rounded file:border-0 file:bg-zinc-800 file:text-white"
-        />
-        <button
-          onClick={upload}
-          disabled={!preview || busy}
-          className="px-3 py-2 rounded bg-emerald-600 disabled:bg-zinc-700 hover:bg-emerald-500"
-        >
-          {busy ? 'Uploading…' : 'Replace library'}
-        </button>
-      </div>
-
-      {msg && <div className="text-sm text-zinc-300">{msg}</div>}
-
-      {preview && (
-        <div className="mt-6 text-xs text-zinc-400 max-h-64 overflow-auto border border-zinc-800 rounded p-3">
-          <strong>Preview (first 5):</strong>
-          <ul className="list-disc ml-5">
-            {Object.values(preview).slice(0, 5).map(h => (
-              <li key={h.id}>{h.number}. {h.title} — <em>{h.firstLine}</em></li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function parseTextToLibrary(txt: string): Library {
-  const lines = txt.replace(/\r\n/g, '\n').split('\n').map(l => l.trimRight());
-
-  const hymns: Hymn[] = [];
-  let cur: Hymn | null = null;
-  let stanza: string[] = [];
-
-  function pushStanza() {
-    const joined = stanza.join(' ').trim();
-    stanza = [];
-    if (!joined || !cur) return;
-    if (/^chorus\b/i.test(joined)) {
-      const rest = joined.replace(/^chorus\b[:\-]?\s*/i, '').trim();
-      cur.chorus = cur.chorus || [];
-      if (rest) cur.chorus.push(rest);
-      return;
-    }
-    cur.verses.push(joined.split(/\s{2,}/).filter(Boolean));
-  }
-  function startNew(title: string) {
-    if (cur) {
-      pushStanza();
-      finalize(cur);
-      hymns.push(cur);
-    }
-    cur = {
-      id: '',
-      title: title.trim(),
-      verses: [],
-      firstLine: ''
-    };
-  }
-  function finalize(h: Hymn) {
-    const first = h.verses[0]?.[0] ?? '';
-    h.firstLine = String(first).trim();
-    const base = h.number ? `${h.number}-${h.title}` : h.title;
-    h.id = slug(base || `hymn-${hymns.length + 1}`);
-    h.searchTokens = Array.from(new Set([
-      ...tokenise(h.title),
-      ...tokenise(h.firstLine),
-      ...(h.number ? [String(h.number)] : [])
-    ]));
   }
 
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i].trim();
-    // Title?
-    if (line && looksLikeTitle(line)) {
-      startNew(line);
-      i++; continue;
-    }
-    if (cur) {
-      if (line === '') {
-        pushStanza();
-      } else {
-        stanza.push(line);
+  function parseHymnsFromHtml(html: string): ImportedHymn[] {
+    // Parse HTML to DOM
+    const doc = new DOMParser().parseFromString(html, "text/html");
+
+    // Treat both h1 and h2 as hymn titles (depending on how Word styles were used)
+    const headings = Array.from(doc.querySelectorAll("h1, h2"));
+
+    const results: ImportedHymn[] = [];
+
+    for (let i = 0; i < headings.length; i++) {
+      const titleEl = headings[i];
+      const title = clean(titleEl.textContent || "").replace(/^\d+\s*[.: -]\s*/, ""); // drop leading numbers like "1."
+
+      // collect paragraphs until next heading
+      const paras: string[] = [];
+      let sib = titleEl.nextElementSibling;
+
+      // walk forward until the next h1/h2 or end
+      while (sib && !/^(H1|H2)$/.test(sib.tagName)) {
+        if (sib.tagName === "P" || sib.tagName === "DIV" || sib.tagName === "SPAN") {
+          const t = clean(sib.textContent || "");
+          if (t) paras.push(t);
+        }
+        sib = sib.nextElementSibling as Element | null;
+      }
+
+      const verses = splitIntoVerses(paras);
+
+      if (title) {
+        results.push({
+          number: results.length + 1,
+          title,
+          verses: verses.length ? verses : [paras.join(" ")].filter(Boolean),
+        });
       }
     }
-    i++;
-  }
-  if (cur) {
-    pushStanza();
-    finalize(cur);
-    hymns.push(cur);
-  }
-  let auto = 1;
-  hymns.forEach(h => { if (h.number == null) h.number = auto++; });
 
-  const out: Library = {};
-  hymns.forEach(h => { out[h.id] = h; });
-  return out;
+    return results;
+  }
+
+  // Split paragraphs into verses using common patterns:
+  // starts with "Verse 1", "V1", "1.", "1:", "1 -", etc.
+  function splitIntoVerses(paragraphs: string[]): string[] {
+    const verses: string[] = [];
+    let current: string[] = [];
+
+    const startsVerse = (line: string) =>
+      /^(?:verse|v)?\s*\d+\s*[.:)\-–—]?\s*/i.test(line);
+
+    for (const line of paragraphs) {
+      if (startsVerse(line)) {
+        // push current and start a new verse
+        if (current.length) verses.push(current.join(" ").trim());
+        current = [line.replace(/^(?:verse|v)?\s*\d+\s*[.:)\-–—]?\s*/i, "").trim()];
+      } else {
+        current.push(line);
+      }
+    }
+    if (current.length) verses.push(current.join(" ").trim());
+
+    // If we still have no verses, try splitting by blank paragraph blocks
+    if (!verses.length) {
+      const joined = paragraphs.join("\n").trim();
+      return joined
+        .split(/\n\s*\n+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+    return verses;
+  }
+
+  function clean(s: string) {
+    return s.replace(/\u00A0/g, " ").replace(/\s+/g, " ").trim();
+  }
+
+  function downloadJson() {
+    if (!hymns.length) return;
+    // Shape your app likely expects:
+    // { hymns: [{ number, title, verses }] }
+    const payload = { hymns };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "hymn_library.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function reset() {
+    setError(null);
+    setHymns([]);
+    setRawPreview("");
+    fileRef.current?.value && (fileRef.current.value = "");
+  }
+
+  return (
+    <>
+      {/* Load the browser build of Mammoth from a CDN */}
+      <Script
+        src="https://unpkg.com/mammoth@1.6.0/mammoth.browser.min.js"
+        strategy="beforeInteractive"
+      />
+      <div className="min-h-screen bg-zinc-950 text-zinc-100 p-6">
+        <div className="max-w-5xl mx-auto space-y-6">
+          <h1 className="text-2xl font-semibold">
+            Hymn Text Importer <span className="text-zinc-400 text-base">(DOCX → JSON)</span>
+          </h1>
+
+          <Box title="1) Upload your DOCX">
+            <div className="flex items-center gap-3">
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".docx"
+                onChange={handleFileChange}
+                className="text-sm file:mr-3 file:rounded-lg file:bg-fuchsia-600 file:hover:bg-fuchsia-500 file:text-white file:px-3 file:py-2 file:border-0 file:cursor-pointer"
+              />
+              <button
+                onClick={reset}
+                className="px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-sm"
+              >
+                Reset
+              </button>
+            </div>
+            <p className="text-xs text-zinc-400 mt-2">
+              Tip: Ensure each hymn title is formatted as <b>Heading 1</b> (or Heading 2) in Word.
+              Verse lines may begin with <em>1.</em>, <em>1:</em>, <em>Verse 1</em>, etc.
+            </p>
+          </Box>
+
+          <div className="grid md:grid-cols-2 gap-6">
+            <Box title="2) Preview">
+              {busy && <div className="text-sm text-zinc-400">Processing…</div>}
+              {error && <div className="text-sm text-red-400">{error}</div>}
+              {!busy && !error && !parsedCount && (
+                <div className="text-sm text-zinc-400">No file processed yet.</div>
+              )}
+              {!!parsedCount && (
+                <div className="space-y-4">
+                  <div className="text-sm">
+                    Parsed <b>{parsedCount}</b> hymns.
+                  </div>
+                  <div className="space-y-4 max-h-[420px] overflow-auto pr-2">
+                    {sample.map((h) => (
+                      <div
+                        key={h.number}
+                        className="rounded-xl bg-zinc-900/60 border border-zinc-800/60 p-3"
+                      >
+                        <div className="text-sm font-semibold">{h.number}. {h.title}</div>
+                        <ol className="mt-2 list-decimal ml-6 text-sm leading-relaxed text-zinc-300 space-y-1">
+                          {h.verses.map((v, i) => (
+                            <li key={i}>{v}</li>
+                          ))}
+                        </ol>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Box>
+
+            <Box title="3) Raw HTML (debug)">
+              <div className="text-xs text-zinc-400 whitespace-pre-wrap max-h-[420px] overflow-auto">
+                {rawPreview || "—"}
+              </div>
+            </Box>
+          </div>
+
+          <Box title="4) Export">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={downloadJson}
+                disabled={!parsedCount}
+                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
+              >
+                Download hymn_library.json
+              </button>
+              <div className="text-xs text-zinc-400">
+                Put the file at <code>/public/data/hymn_library.json</code> in your repo and commit.
+              </div>
+            </div>
+          </Box>
+        </div>
+      </div>
+    </>
+  );
 }
