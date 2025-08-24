@@ -1,120 +1,94 @@
-// utils/firebase.ts
-import { initializeApp, getApps } from "firebase/app";
+// utils/firebase.ts  — modular Firebase ONLY (no compat)
+// This file centralizes all Firebase initialization and exports.
+
+import { initializeApp } from 'firebase/app';
 import {
   getDatabase,
-  ref,
-  set,
+  ref as dbRef,
   onValue,
   off,
-  serverTimestamp,
-  get,
+  set,
   update,
-  DataSnapshot,
-} from "firebase/database";
+  remove,
+  push,
+  child,
+  type DatabaseReference,
+} from 'firebase/database';
 import {
   getAuth,
+  onAuthStateChanged,
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
-} from "firebase/auth";
+  signOut,
+} from 'firebase/auth';
 import {
   getStorage,
-  ref as storageRef,
+  ref as fileRef,
   uploadBytes,
   getDownloadURL,
-} from "firebase/storage";
+  deleteObject,
+  ref as storageRef,          // alias for clarity
+  refFromURL as storageRefFromURL,
+} from 'firebase/storage';
 
-// ---- App init ----
+// ───────────────────────────────────────────────────────────────────────────────
+// Keep YOUR existing config values here (env or inline). The keys must be the same.
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
-  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL!,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET!,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID!,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
+  apiKey: process.env.NEXT_PUBLIC_FB_API_KEY!,
+  authDomain: process.env.NEXT_PUBLIC_FB_AUTH_DOMAIN!,
+  databaseURL: process.env.NEXT_PUBLIC_FB_DB_URL!,
+  projectId: process.env.NEXT_PUBLIC_FB_PROJECT_ID!,
+  storageBucket: process.env.NEXT_PUBLIC_FB_STORAGE!,
+  messagingSenderId: process.env.NEXT_PUBLIC_FB_SENDER_ID!,
+  appId: process.env.NEXT_PUBLIC_FB_APP_ID!,
 };
+// ───────────────────────────────────────────────────────────────────────────────
 
-const app = getApps().length ? getApps()[0]! : initializeApp(firebaseConfig);
+export const app = initializeApp(firebaseConfig);
+
+// Core services (singletons)
 export const db = getDatabase(app);
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 
-// ---- Re-exports (compat with existing imports) ----
-export { ref, onValue, set, off, update } from "firebase/database";
-export { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
-
-// ---- Helpers ----
-export const dbRef = (path: string) => ref(db, path);
-
-export type PreviewSlidesPayload = {
-  kind: "slides";
-  slides: string[];
-  index?: number;
-  meta?: any;
+// Re-export the DB helpers so callers import only from this file
+export {
+  dbRef, onValue, off, set, update, remove, push, child,
+  type DatabaseReference,
 };
-export type PreviewHtmlPayload = {
-  html: string;
-  meta?: any;
-};
-export type PreviewPayload = PreviewSlidesPayload | PreviewHtmlPayload | null;
+export { onAuthStateChanged, signInWithEmailAndPassword, sendPasswordResetEmail, signOut };
 
-const previewRef = (slot: number) => ref(db, `preview_slots/${slot}`);
-const liveRef = ref(db, "live_content");
+// Convenience paths/refs used around the app
+export const previewPath = (slot: number) => `preview/${slot}`;
+export const livePath = 'live';
 
-// Write preview payload
-export async function setPreviewSlot(slot: number, payload: PreviewPayload) {
-  await set(previewRef(slot), payload);
+export const previewRef = (slot: number) => dbRef(db, previewPath(slot));
+export const liveRef = () => dbRef(db, livePath);
+
+// ───────────────────────────────────────────────────────────────────────────────
+// Slides (Storage) helpers
+//  - uploadSlideImage(file) -> returns public URL
+//  - deleteSlideByUrl(url)  -> best-effort delete from Storage
+
+export async function uploadSlideImage(file: File, folder = 'slides'): Promise<string> {
+  const safeName = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
+  const r = fileRef(storage, `${folder}/${safeName}`);
+  await uploadBytes(r, file);
+  return await getDownloadURL(r);
 }
 
-// Listen to preview slot
-export function listenPreviewSlot(
-  slot: number,
-  cb: (payload: PreviewPayload) => void
-) {
-  const r = previewRef(slot);
-  const unsub = onValue(r, (snap) =>
-    cb((snap.exists() ? (snap.val() as PreviewPayload) : null))
-  );
-  return () => off(r);
-}
-
-// Update current slide index for queued previews
-export async function setPreviewIndex(slot: number, index: number) {
-  await update(previewRef(slot), { index });
-}
-
-// Set/Listen live content
-export async function setLiveContent(payload: { html: string; meta?: any }) {
-  await set(liveRef, { ...payload, ts: serverTimestamp() });
-}
-export function listenLiveContent(
-  cb: (payload: { html: string; meta?: any } | null) => void
-) {
-  const unsub = onValue(liveRef, (snap) =>
-    cb((snap.exists() ? (snap.val() as any) : null))
-  );
-  return () => off(liveRef);
-}
-
-// Clear preview; if it's what's live, clear live too.
-export async function clearPreviewSlot(slot: number) {
-  // read live first
-  const liveSnap = await get(liveRef);
-  const liveVal = liveSnap.exists() ? (liveSnap.val() as any) : null;
-
-  // clear the preview slot
-  await set(previewRef(slot), null);
-
-  // if live is sourced from this slot, clear live too
-  if (liveVal?.meta?.fromPreview === slot) {
-    await set(liveRef, null);
+export async function deleteSlideByUrl(url: string): Promise<void> {
+  try {
+    const r = storageRefFromURL(url);
+    await deleteObject(r);
+  } catch {
+    // ignore—URL may be external or already deleted
   }
 }
 
-// Optional: upload slide image to Storage (not required for current data-URL flow)
-export async function uploadSlideImage(file: Blob, filename?: string): Promise<string> {
-  const name = filename || `slide-${Date.now()}-${Math.random().toString(36).slice(2)}.png`;
-  const sref = storageRef(storage, `slides/${name}`);
-  await uploadBytes(sref, file);
-  return await getDownloadURL(sref);
+// Optional small wrapper to keep old call sites working if any existed:
+export function subscribeToLive(cb: (val: any) => void): () => void {
+  const r = liveRef();
+  const unsubscribe = onValue(r, (snap) => cb(snap.val()));
+  return () => off(r);
 }
