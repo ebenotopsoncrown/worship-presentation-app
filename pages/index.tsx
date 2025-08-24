@@ -1,224 +1,246 @@
 // pages/index.tsx
-'use client';
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import AppHeader from "../components/AppHeader";
+import HymnDisplay from "../components/HymnDisplay";
+import BibleDisplay from "../components/BibleDisplay";
+import SlidesMini from "../components/SlidesMini";
 
-import React, {useEffect, useMemo, useRef, useState} from 'react';
-import Head from 'next/head';
+// IMPORTANT: use the names your firebase util actually exports.
+// From your previous logs, the ones that exist are: ref, onValue, set
+import { ref, onValue, set } from "../utils/firebase";
 
-// 🔒 Never import things that touch window / firebase at module top in Next.
-// We lazy-load utils only on the client inside useEffect / callbacks.
-type LivePayload = { html: string; meta?: Record<string, any> };
+/** Helpers */
+const toStr = (v: unknown): string => {
+  if (v == null) return "";
+  if (typeof v === "string") return v;
+  try {
+    return String(v);
+  } catch {
+    return "";
+  }
+};
 
-// ---- helpers ---------------------------------------------------------------
+// Normalize a Realtime Database snapshot value that may be:
+// - a plain string
+// - an object like { html: string, ... }
+// - a raw snapshot fallback
+const pickHtml = (snap: any): { html: string; meta?: any } => {
+  let raw: any;
 
-const toStr = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' : String(v));
-const htmlSafe = (v: unknown): string => toStr(v); // keep simple; React handles innerHTML
+  // If it's a Firebase snapshot with .val()
+  if (snap && typeof snap.val === "function") {
+    raw = snap.val();
+  } else {
+    raw = snap;
+  }
 
-// A tiny, local preview card so we never get “SimplePreviewCard is not defined”
-function PreviewPanel({
-  title,
-  flavor, // 'p1' | 'p2' | 'p3' | 'p4' | 'live'
-  html,
-  slot,
-  onClear,
-  onGoLive,
-}: {
+  if (raw && typeof raw === "object" && "html" in raw) {
+    return { html: toStr((raw as any).html), meta: (raw as any).meta };
+  }
+
+  return { html: toStr(raw), meta: undefined };
+};
+
+/** Firebase paths */
+const previewPath = (slot: number) => `previews/${slot}`;
+const livePath = `live`;
+
+/** A small preview/live card (keeps your dark theme classes) */
+type CardProps = {
   title: string;
-  flavor: 'p1' | 'p2' | 'p3' | 'p4' | 'live';
   html: string | null;
-  slot?: number;
-  onClear?: (slot?: number) => void;
-  onGoLive?: (slot?: number) => void;
-}) {
-  const isLive = flavor === 'live';
+  onClear?: () => void;
+  onGoLive?: () => void;
+  rightExtra?: React.ReactNode;
+};
+const PanelCard: React.FC<CardProps> = ({ title, html, onClear, onGoLive, rightExtra }) => {
   return (
-    <div className={`panel panel-${flavor}${isLive ? ' panel--live' : ''}`}>
-      <div className="panel-header">{title}</div>
+    <div className="panel">
+      <div className="panel-header flex items-center justify-between">
+        <span>{title}</span>
+        <div className="flex items-center gap-2">
+          {rightExtra}
+        </div>
+      </div>
 
       <div className="preview-frame flex items-center justify-center">
         {html ? (
           <div
             className="w-full text-center leading-tight text-zinc-100"
-            // 🔒 Always stringify/guard
-            dangerouslySetInnerHTML={{ __html: htmlSafe(html) }}
+            // content is already our sanitised string; you were using HTML strings before
+            dangerouslySetInnerHTML={{ __html: html }}
           />
         ) : (
           <div className="text-zinc-400">Empty</div>
         )}
       </div>
 
-      {!isLive && (
+      {(onClear || onGoLive) && (
         <div className="flex items-center justify-between mt-3 gap-2">
-          <button onClick={() => onClear?.(slot)} className="btn btn-ghost">
-            Clear
-          </button>
-          <button
-            onClick={() => html && onGoLive?.(slot)}
-            className="btn btn-green"
-            disabled={!html}
-          >
-            Go Live
-          </button>
+          {onClear && (
+            <button onClick={onClear} className="btn btn-ghost">
+              Clear
+            </button>
+          )}
+          <div className="flex-1" />
+          {onGoLive && (
+            <button
+              onClick={onGoLive}
+              className="btn btn-green"
+              disabled={!html}
+              title={!html ? "Nothing to send" : "Send to Live"}
+            >
+              Go Live
+            </button>
+          )}
         </div>
       )}
     </div>
   );
-}
-
-// ---- page ------------------------------------------------------------------
+};
 
 export default function IndexPage() {
-  // local UI state
+  // preview HTML values
   const [p1, setP1] = useState<string | null>(null);
   const [p2, setP2] = useState<string | null>(null);
   const [p3, setP3] = useState<string | null>(null);
   const [p4, setP4] = useState<string | null>(null);
-  const [live, setLive] = useState<string | null>(null);
 
-  // We only wire realtime / firebase on the client.
+  // live HTML + meta (so we can clear live if a preview that fed it is cleared)
+  const [liveHtml, setLiveHtml] = useState<string | null>(null);
+  const [liveMeta, setLiveMeta] = useState<any>(null);
+
+  /** Subscribe to the 4 previews */
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    const offs: Array<() => void> = [];
 
-    let unsubscribes: Array<() => void> = [];
+    [1, 2, 3, 4].forEach((slot) => {
+      const off = onValue(ref(previewPath(slot)), (snap: any) => {
+        const { html } = pickHtml(snap);
+        const value = html || null;
 
-    (async () => {
-      try {
-        // Lazy import to keep SSR clean
-        const { dbRef, onValue, previewRef, liveRef, set, remove } = await import('../utils/firebase');
-
-        // 🧭 helpers to write/clear
-        const pushLive = async (payload: LivePayload) => {
-          await set(liveRef(), { html: toStr(payload.html), meta: payload.meta || {} });
-        };
-        const clearSlot = async (slot?: number) => {
-          if (!slot) return;
-          await remove(previewRef(slot));
-        };
-
-        // 🔔 subscribe to previews
-[1, 2, 3, 4].forEach((slot) => {
-  const off = onValue(previewRef(slot), (snap: any) => {
-    // In RTDB, snap.val() returns the data. Guard if val is not a function.
-    const s: any = snap;
-    const raw =
-      typeof s?.val === 'function'
-        ? s.val()
-        : (s?.val ?? s);
-
-    const html =
-      raw && typeof raw === 'object' && 'html' in raw ? (raw as any).html : raw ?? '';
-
-    const value = toStr(html);
-
-    if (slot === 1) setP1(value || null);
-    if (slot === 2) setP2(value || null);
-    if (slot === 3) setP3(value || null);
-    if (slot === 4) setP4(value || null);
-  });
-
-  // If you collect unsubs:
-  // offs.push(off);
-});
-
-        // 🔔 subscribe to live
-        const offLive = onValue(liveRef(), (snap: any) => {
-          const data = snap?.val?.() ?? snap?.val?. ?? snap;
-          const value = toStr(data?.html ?? data ?? '');
-          setLive(value || null);
-        });
-        unsubscribes.push(() => offLive && offLive());
-
-        // expose safe actions on window for buttons
-        (window as any).__wp_actions__ = {
-          pushLive,
-          clearSlot,
-        };
-      } catch (e) {
-        // If utils/firebase import fails, don’t crash the whole page
-        console.error('Client wiring failed:', e);
-      }
-    })();
+        if (slot === 1) setP1(value);
+        if (slot === 2) setP2(value);
+        if (slot === 3) setP3(value);
+        if (slot === 4) setP4(value);
+      });
+      // save unsubscribe
+      offs.push(off as unknown as () => void);
+    });
 
     return () => {
-      unsubscribes.forEach((fn) => {
-        try { fn(); } catch {}
+      offs.forEach((fn) => {
+        try { fn && fn(); } catch {}
       });
     };
   }, []);
 
-  const actions = (typeof window !== 'undefined' && (window as any).__wp_actions__) || {};
+  /** Subscribe to live */
+  useEffect(() => {
+    const offLive = onValue(ref(livePath), (snap: any) => {
+      const { html, meta } = pickHtml(snap);
+      setLiveHtml(html || null);
+      setLiveMeta(meta || null);
+    });
+    return () => {
+      try { (offLive as unknown as () => void)(); } catch {}
+    };
+  }, []);
+
+  /** Writers */
+  const clearPreviewSlot = useCallback(async (slot: number) => {
+    await set(ref(previewPath(slot)), null);
+
+    // if live currently shows that slot, clear it as well
+    if (liveMeta && liveMeta.fromPreview === slot) {
+      await set(ref(livePath), null);
+    }
+  }, [liveMeta]);
+
+  const goLiveFromSlot = useCallback(async (slot: number) => {
+    const value = slot === 1 ? p1 : slot === 2 ? p2 : slot === 3 ? p3 : p4;
+    if (!value) return;
+
+    await set(ref(livePath), {
+      html: value,
+      meta: {
+        fromPreview: slot,
+        ts: Date.now(),
+      },
+    });
+  }, [p1, p2, p3, p4]);
+
+  /** UI */
+  const previews = useMemo(
+    () => [
+      { slot: 1, title: "Preview 1 (Queued)", html: p1, clear: () => clearPreviewSlot(1), go: () => goLiveFromSlot(1) },
+      { slot: 2, title: "Preview 2", html: p2, clear: () => clearPreviewSlot(2), go: () => goLiveFromSlot(2) },
+      { slot: 3, title: "Preview 3", html: p3, clear: () => clearPreviewSlot(3), go: () => goLiveFromSlot(3) },
+      { slot: 4, title: "Preview 4", html: p4, clear: () => clearPreviewSlot(4), go: () => goLiveFromSlot(4) },
+    ],
+    [p1, p2, p3, p4, clearPreviewSlot, goLiveFromSlot]
+  );
 
   return (
-    <>
-      <Head>
-        <title>Worship Presentation App — MFM Goshen Assembly</title>
-      </Head>
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-4 md:p-6 space-y-6">
+      <AppHeader />
 
-      <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-gradient-to-r from-fuchsia-600 via-violet-600 to-indigo-600">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between text-white">
-          <strong>Worship Presentation App — MFM Goshen Assembly</strong>
-          <div className="flex items-center gap-2">
-            <span className="badge">Not signed in</span>
-            <button className="btn btn-ghost">Logout</button>
+      {/* top grid: previews + live (keeps your panel sizing; adjust with Tailwind if needed) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+          {/* two rows of two previews */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {previews.slice(0, 2).map((p) => (
+              <PanelCard
+                key={p.slot}
+                title={p.title}
+                html={p.html}
+                onClear={p.clear}
+                onGoLive={p.go}
+              />
+            ))}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {previews.slice(2, 4).map((p) => (
+              <PanelCard
+                key={p.slot}
+                title={p.title}
+                html={p.html}
+                onClear={p.clear}
+                onGoLive={p.go}
+              />
+            ))}
           </div>
         </div>
-      </header>
 
-      <main className="min-h-screen bg-zinc-950 text-zinc-100 p-4 md:p-6 space-y-6">
-
-        {/* Top row: Previews 1–2 + Live */}
-        <div className="grid grid-cols-1 xl:grid-cols-[1fr_1fr_1.3fr] gap-4">
-          <PreviewPanel
-            title="Preview 1 (Queued)"
-            flavor="p1"
-            html={p1}
-            slot={1}
-            onClear={(slot) => actions?.clearSlot?.(slot)}
-            onGoLive={(slot) =>
-              p1 && actions?.pushLive?.({ html: p1, meta: { fromPreview: slot } })
-            }
-          />
-
-          <PreviewPanel
-            title="Preview 2"
-            flavor="p2"
-            html={p2}
-            slot={2}
-            onClear={(slot) => actions?.clearSlot?.(slot)}
-            onGoLive={(slot) =>
-              p2 && actions?.pushLive?.({ html: p2, meta: { fromPreview: slot } })
-            }
-          />
-
-          <PreviewPanel title="Live" flavor="live" html={live} />
-        </div>
-
-        {/* Second row: Previews 3–4 */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          <PreviewPanel
-            title="Preview 3"
-            flavor="p3"
-            html={p3}
-            slot={3}
-            onClear={(slot) => actions?.clearSlot?.(slot)}
-            onGoLive={(slot) =>
-              p3 && actions?.pushLive?.({ html: p3, meta: { fromPreview: slot } })
-            }
-          />
-
-          <PreviewPanel
-            title="Preview 4"
-            flavor="p4"
-            html={p4}
-            slot={4}
-            onClear={(slot) => actions?.clearSlot?.(slot)}
-            onGoLive={(slot) =>
-              p4 && actions?.pushLive?.({ html: p4, meta: { fromPreview: slot } })
+        {/* live column */}
+        <div className="lg:col-span-1">
+          <PanelCard
+            title="Live"
+            html={liveHtml}
+            // Live card has no GoLive; clear only from the preview that fed it (handled in clearPreviewSlot)
+            onClear={undefined}
+            rightExtra={
+              <span className="text-xs text-zinc-300">
+                {liveMeta?.fromPreview ? `from Preview ${liveMeta.fromPreview}` : ""}
+              </span>
             }
           />
         </div>
+      </div>
 
-        {/* The rest of your grids (Hymns, Bible, Slides) remain as-is */}
-      </main>
-    </>
+      {/* bottom grid: Hymns / Bible / Slides (unchanged components) */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div className="xl:col-span-1">
+          <HymnDisplay />
+        </div>
+        <div className="xl:col-span-1">
+          <BibleDisplay />
+        </div>
+        <div className="xl:col-span-1">
+          <SlidesMini />
+        </div>
+      </div>
+    </div>
   );
 }
