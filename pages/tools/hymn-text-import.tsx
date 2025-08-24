@@ -23,7 +23,117 @@ declare global {
     mammoth?: any;
   }
 }
+// --- HYMN PARSER (add once, above your component) ----------------------------
+type Hymn = { id: string; title: string; verses: string[] };
 
+function extractHymnsFromHtml(html: string): Hymn[] {
+  const normalized = html
+    .replace(/\r/g, '')
+    .replace(/<\/p>\s*<p>/gi, '</p>\n<p>');
+
+  const hasHeadings = /<h1|<h2/i.test(normalized);
+  if (hasHeadings) return parseByHeadings(normalized);
+  return parseByParagraphs(normalized);
+}
+
+function parseByHeadings(html: string): Hymn[] {
+  const chunks = html.split(/<\/h1>|<\/h2>/i);
+  const hymns: Hymn[] = [];
+
+  for (const chunk of chunks) {
+    const m = chunk.match(/<(h1|h2)[^>]*>([^]*?)$/i);
+    if (!m) continue;
+
+    const title = stripTags(m[2]).trim();
+    if (!title) continue;
+
+    const h: Hymn = { id: toId(title), title, verses: [] };
+    const body = chunk.replace(/^(.*?<\/(h1|h2)>)/is, '');
+    pushBody(body, h);
+
+    if (h.verses.length) hymns.push(h);
+  }
+  return hymns;
+}
+
+function parseByParagraphs(html: string): Hymn[] {
+  const blocks = html
+    .split(/<\/p>/i)
+    .map(s => stripTags(s).trim())
+    .filter(Boolean);
+
+  const hymns: Hymn[] = [];
+  let current: Hymn | null = null;
+
+  for (const line of blocks) {
+    if (!current) {
+      if (isTitleLine(line)) {
+        current = { id: toId(line), title: line, verses: [] };
+        hymns.push(current);
+      }
+      continue;
+    }
+
+    if (isTitleLine(line)) {
+      current = { id: toId(line), title: line, verses: [] };
+      hymns.push(current);
+      continue;
+    }
+
+    appendToVerses(current, line);
+  }
+
+  return hymns.filter(h => h.verses.length);
+}
+
+function pushBody(rawHtml: string, h: Hymn) {
+  const paras = rawHtml
+    .replace(/\r/g, '')
+    .split(/<\/p>/i)
+    .map(s => stripTags(s).trim())
+    .filter(Boolean);
+
+  for (const p of paras) appendToVerses(h, p);
+}
+
+function appendToVerses(h: Hymn, line: string) {
+  if (/^\d+(\.|:)\s*/.test(line) || /^(Chorus|Refrain)\b/i.test(line)) {
+    h.verses.push(line.replace(/^\d+(\.|:)\s*/, ''));
+    return;
+  }
+  if (!h.verses.length) {
+    h.verses.push(line);
+  } else {
+    h.verses[h.verses.length - 1] =
+      `${h.verses[h.verses.length - 1]}\n${line}`.trim();
+  }
+}
+
+function stripTags(s: string) {
+  return s.replace(/<\/?[^>]+>/g, '');
+}
+
+function toId(title: string) {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function isTitleLine(s: string) {
+  if (s.length > 90) return false;
+  if (/^\d+(\.|:)\s/.test(s)) return false;
+  if (/^(Chorus|Refrain)\b/i.test(s)) return false;
+
+  const letters = s.replace(/[^A-Za-z]/g, '');
+  if (letters.length >= 3 && s === s.toUpperCase()) return true;
+
+  const words = s.split(/\s+/).filter(Boolean);
+  if (!words.length) return false;
+  const capish = words.filter(w => /^[A-Z]/.test(w)).length / words.length;
+  return capish > 0.6 && !/[.?!]$/.test(s);
+}
+// --- HYMN PARSER END ---------------------------------------------------------
 export default function HymnTextImportPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -269,3 +379,4 @@ export default function HymnTextImportPage() {
     </>
   );
 }
+
