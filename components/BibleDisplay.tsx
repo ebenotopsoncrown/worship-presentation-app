@@ -9,9 +9,10 @@ const verMap: Record<string, string> = {
   WEB: 'web',
 };
 
-async function fetchVerses(refTxt: string, ver: string): Promise<{ ref: string; verses: Verse[] }> {
+async function fetchVerses(refTxt: string, ver: string) {
   const v = verMap[ver] || ver.toLowerCase();
-  const res = await fetch(`/api/bible?ref=${encodeURIComponent(refTxt)}&ver=${encodeURIComponent(v)}`);
+  const q = refTxt.trim();                       // <-- trim the input
+  const res = await fetch(`/api/bible?q=${encodeURIComponent(q)}&ver=${encodeURIComponent(v)}`);  // <-- ref -> q
   if (!res.ok) {
     const txt = await res.text().catch(() => '');
     throw new Error(`Bible API error (${res.status}) ${txt}`);
