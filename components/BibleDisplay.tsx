@@ -9,9 +9,9 @@ const verMap: Record<string, string> = {
   WEB: 'web',
 };
 
-async function fetchVerses(ref: string, ver: string): Promise<{ ref: string; verses: Verse[] }> {
+async function fetchVerses(refTxt: string, ver: string): Promise<{ ref: string; verses: Verse[] }> {
   const v = verMap[ver] || ver.toLowerCase();
-  const res = await fetch(`/api/bible?ref=${encodeURIComponent(ref)}&ver=${encodeURIComponent(v)}`);
+  const res = await fetch(`/api/bible?ref=${encodeURIComponent(refTxt)}&ver=${encodeURIComponent(v)}`);
   if (!res.ok) {
     const txt = await res.text().catch(() => '');
     throw new Error(`Bible API error (${res.status}) ${txt}`);
@@ -79,44 +79,67 @@ export default function BibleDisplay() {
   };
 
   return (
-    <div className="panel panel--bible">
+    <div className="panel panel--bible h-[520px] flex flex-col">
       <div className="panel-header">Bible</div>
 
       <div className="flex items-center gap-2 mb-2">
         <input
-          className="field w-full"
+          className="w-full bg-zinc-800 rounded px-3 py-2 outline-none"
           placeholder="John 3:16-18"
           value={refTxt}
           onChange={(e) => setRefTxt(e.target.value)}
         />
-        <select className="select" value={ver} onChange={(e) => setVer(e.target.value as any)}>
+        <select
+          className="bg-zinc-800 rounded px-2 py-2"
+          value={ver}
+          onChange={(e) => setVer(e.target.value as any)}
+        >
           <option value="KJV">KJV</option>
           <option value="WEB">WEB</option>
         </select>
-        <button onClick={preview} className="btn btn-green" disabled={loading}>
-          {loading ? 'Loading…' : 'Preview'}
+        <button
+          onClick={preview}
+          className="px-3 py-2 rounded bg-zinc-800 hover:bg-zinc-700"
+          disabled={loading}
+        >
+          Preview
         </button>
       </div>
 
       <div className="flex items-center gap-2 mb-3">
-        <select className="select" value={slot} onChange={(e) => setSlot(parseInt(e.target.value, 10))}>
+        <select
+          className="bg-zinc-800 rounded px-2 py-2"
+          value={slot}
+          onChange={(e) => setSlot(parseInt(e.target.value, 10))}
+        >
           <option value={1}>Preview 1</option>
           <option value={2}>Preview 2</option>
           <option value={3}>Preview 3</option>
           <option value={4}>Preview 4</option>
         </select>
-        <button onClick={send} className="btn btn-green" disabled={loading}>
-          {loading ? 'Sending…' : 'Send to Preview'}
+        <button
+          onClick={send}
+          className="px-3 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white disabled:bg-zinc-700"
+          disabled={loading}
+        >
+          Send to Preview
         </button>
       </div>
 
-      <div className="preview-frame">
-        {error && <div className="text-red-400 text-sm mb-2">{error}</div>}
-        {previewHtml ? (
-          <div className="text-2xl leading-tight" dangerouslySetInnerHTML={{ __html: previewHtml }} />
-        ) : (
-          <div className="text-zinc-400 text-sm">Click Preview to load the passage…</div>
-        )}
+      {/* equal-height preview area */}
+      <div className="flex-1 min-h-0">
+        <div className="bg-black/40 rounded-xl h-full overflow-auto p-4 flex items-center justify-center">
+          {previewHtml ? (
+            <div
+              className="w-full text-center text-zinc-50 text-3xl md:text-4xl leading-tight"
+              dangerouslySetInnerHTML={{ __html: previewHtml }}
+            />
+          ) : error ? (
+            <div className="text-red-400">{error}</div>
+          ) : (
+            <div className="text-zinc-500">Click Preview to load the passage…</div>
+          )}
+        </div>
       </div>
     </div>
   );
