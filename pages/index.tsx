@@ -83,11 +83,14 @@ function LiveScreen() {
   }, []);
 
   return (
-    <div className="bg-zinc-900 rounded-2xl p-4 shadow-inner border border-zinc-800 h-full">
+    // Make the card a flex column so the display box can expand
+    <div className="bg-zinc-900 rounded-2xl p-4 shadow-inner border border-zinc-800 h-full flex flex-col">
       <div className="rounded-md px-3 py-1.5 text-sm font-semibold text-white bg-gradient-to-r from-fuchsia-600 via-violet-600 to-indigo-600 mb-3">
         Live
       </div>
-      <div className="bg-black/60 rounded-xl h-[220px] overflow-auto p-4 flex items-center justify-center">
+
+      {/* This box now flexes to fill the card height (with a sensible minimum) */}
+      <div className="bg-black/60 rounded-xl flex-1 min-h-[260px] overflow-auto p-4 flex items-center justify-center">
         {html ? (
           <div
             className="w-full text-center text-zinc-50 text-3xl md:text-4xl leading-tight"
