@@ -1,3 +1,4 @@
+'use client';
 import React, { useRef, useState } from 'react';
 import {
   setPreviewSlot,       // <- must exist in utils/firebase (writes to preview_slots/<slot>)
@@ -395,3 +396,4 @@ function ShapeTool({
     </div>
   );
 }
+
