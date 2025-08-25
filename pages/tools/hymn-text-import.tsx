@@ -1,398 +1,296 @@
-// pages/tools/hymn-text-import.tsx
-import React, { useMemo, useRef, useState } from "react";
-import Script from "next/script";
+'use client';
 
-// Minimal styling that matches your app tone a bit
-const Box: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <div className="rounded-2xl bg-[#0d0f16] border border-zinc-800/60 p-4 shadow-lg">
-    <div className="text-sm font-semibold bg-gradient-to-r from-fuchsia-500 to-indigo-500 bg-clip-text text-transparent">
-      {title}
-    </div>
-    <div className="mt-3">{children}</div>
-  </div>
-);
+import React, { useCallback, useMemo, useState } from 'react';
 
-type ImportedHymn = {
-  number: number;      // 1-based
+/** Data shape your app already understands */
+type Hymn = {
+  number: number;
   title: string;
-  verses: string[];    // each item = a verse (joined lines)
+  verses: string[]; // one item per verse (strings or line arrays both work, but we use strings)
 };
 
-declare global {
-  interface Window {
-    mammoth?: any;
-  }
+type ImportResult = {
+  hymns: Hymn[];
+};
+
+function clean(s: string): string {
+  return (s || '')
+    .replace(/\u00A0/g, ' ') // &nbsp;
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\s+\n/g, '\n')
+    .replace(/\n\s+/g, '\n')
+    .trim();
 }
 
-/* -------------------------------------------------------------------------- */
-/* NEW ROBUST PARSER (kept exactly as designed earlier)                       */
-/* -------------------------------------------------------------------------- */
-type Hymn = { id: string; title: string; verses: string[] };
+/**
+ * Split a raw hymn body into ["verse 1 text", "verse 2 text", ...]
+ * Supports two common patterns:
+ *  - Numbered verses: 1. ... 2. ... 3. ...
+ *  - Blank-line separated paragraphs (each block = a verse)
+ */
+function splitIntoVerses(raw: string): string[] {
+  if (!raw) return [];
 
-function extractHymnsFromHtml(html: string): Hymn[] {
-  const normalized = html
-    .replace(/\r/g, "")
-    .replace(/<\/p>\s*<p>/gi, "</p>\n<p>");
+  // Normalise breaks from mammoth HTML
+  let txt = raw
+    .replace(/\r/g, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>\s*<p>/gi, '\n')
+    .replace(/<\/?p[^>]*>/gi, '\n')
+    .replace(/<\/?strong[^>]*>/gi, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 
-  const hasHeadings = /<h1|<h2/i.test(normalized);
-  if (hasHeadings) return parseByHeadings(normalized);
-  return parseByParagraphs(normalized);
-}
+  // Do we see numbered markers like "1." "2)" at the start of lines?
+  const hasNumbered = /(^|\n)\s*\d{1,2}\s*[\.\)]\s+/.test(txt);
+  let verses: string[];
 
-function parseByHeadings(html: string): Hymn[] {
-  const chunks = html.split(/<\/h1>|<\/h2>/i);
-  const hymns: Hymn[] = [];
-
-  for (const chunk of chunks) {
-    const m = chunk.match(/<(h1|h2)[^>]*>([^]*?)$/i);
-    if (!m) continue;
-
-    const title = stripTags(m[2]).trim();
-    if (!title) continue;
-
-    const h: Hymn = { id: toId(title), title, verses: [] };
-    const body = chunk.replace(/^(.*?<\/(h1|h2)>)/is, "");
-    pushBody(body, h);
-
-    if (h.verses.length) hymns.push(h);
-  }
-  return hymns;
-}
-
-function parseByParagraphs(html: string): Hymn[] {
-  const blocks = html
-    .split(/<\/p>/i)
-    .map((s) => stripTags(s).trim())
-    .filter(Boolean);
-
-  const hymns: Hymn[] = [];
-  let current: Hymn | null = null;
-
-  for (const line of blocks) {
-    if (!current) {
-      if (isTitleLine(line)) {
-        current = { id: toId(line), title: line, verses: [] };
-        hymns.push(current);
-      }
-      continue;
-    }
-
-    if (isTitleLine(line)) {
-      current = { id: toId(line), title: line, verses: [] };
-      hymns.push(current);
-      continue;
-    }
-
-    appendToVerses(current, line);
-  }
-
-  return hymns.filter((h) => h.verses.length);
-}
-
-function pushBody(rawHtml: string, h: Hymn) {
-  const paras = rawHtml
-    .replace(/\r/g, "")
-    .split(/<\/p>/i)
-    .map((s) => stripTags(s).trim())
-    .filter(Boolean);
-
-  for (const p of paras) appendToVerses(h, p);
-}
-
-function appendToVerses(h: Hymn, line: string) {
-  if (/^\d+(\.|:)\s*/.test(line) || /^(Chorus|Refrain)\b/i.test(line)) {
-    h.verses.push(line.replace(/^\d+(\.|:)\s*/, ""));
-    return;
-  }
-  if (!h.verses.length) {
-    h.verses.push(line);
+  if (hasNumbered) {
+    // Split at verse labels (lookahead keeps the delimiter on the new block)
+    verses = txt
+      .split(/(?=(^|\n)\s*\d{1,2}\s*[\.\)]\s+)/g)
+      .map(block =>
+        block
+          .replace(/(^|\n)\s*\d{1,2}\s*[\.\)]\s+/, '') // remove the "1." / "2)" prefix
+          .trim()
+      )
+      .filter(Boolean);
   } else {
-    h.verses[h.verses.length - 1] = `${h.verses[h.verses.length - 1]}\n${line}`.trim();
+    // Fallback: split on blank lines
+    verses = txt
+      .split(/\n\s*\n+/g)
+      .map(v => v.trim())
+      .filter(Boolean);
   }
+
+  // Final tidy inside each verse
+  verses = verses.map(v =>
+    v
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\n{2,}/g, '\n')
+      .trim()
+  );
+
+  return verses;
 }
 
-function stripTags(s: string) {
-  return s.replace(/<\/?[^>]+>/g, "");
+/**
+ * Extract hymns from Mammoth-produced HTML.
+ * Titles are taken from H1/H2. As a fallback we detect a bold-only paragraph as a title.
+ */
+function extractHymnsFromHtml(html: string): Hymn[] {
+  const container = document.createElement('div');
+  container.innerHTML = html;
+
+  const hymns: Hymn[] = [];
+  let currentTitle = '';
+  let currentBodyParts: string[] = [];
+
+  const flush = () => {
+    const bodyText = clean(currentBodyParts.join('\n').trim());
+    const verses = splitIntoVerses(bodyText);
+    const title = clean(currentTitle);
+    if (title && verses.length) {
+      hymns.push({
+        number: hymns.length + 1,
+        title,
+        verses,
+      });
+    }
+    currentTitle = '';
+    currentBodyParts = [];
+  };
+
+  // We only walk top-level blocks that Mammoth typically emits: p, h1, h2, h3, etc.
+  const blocks = Array.from(container.querySelectorAll('h1,h2,h3,p,div,ul,ol,li'));
+
+  for (const el of blocks) {
+    const tag = el.tagName.toLowerCase();
+
+    // Title markers: h1/h2 are the primary signal
+    if (tag === 'h1' || tag === 'h2') {
+      if (currentTitle || currentBodyParts.length) flush();
+      currentTitle = el.textContent || '';
+      continue;
+    }
+
+    // Fallback: a paragraph that is "strong-only" can be a title in some docs
+    if (
+      tag === 'p' &&
+      el.childNodes.length > 0 &&
+      Array.from(el.childNodes).every(
+        n =>
+          (n.nodeType === Node.ELEMENT_NODE &&
+            (n as HTMLElement).tagName.toLowerCase() === 'strong') ||
+          n.textContent?.trim() === ''
+      )
+    ) {
+      if (currentTitle || currentBodyParts.length) flush();
+      currentTitle = el.textContent || '';
+      continue;
+    }
+
+    // Otherwise treat as body
+    if (tag === 'p' || tag === 'div' || tag === 'li') {
+      const t = clean(el.textContent || '');
+      if (t) currentBodyParts.push(t);
+    }
+  }
+
+  // Flush last hymn
+  if (currentTitle || currentBodyParts.length) flush();
+
+  // Only keep hymns that have both title and at least one verse
+  return hymns.filter(h => h.title && h.verses.length > 0);
 }
 
-function toId(title: string) {
-  return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+/** Download helper */
+function downloadJson(data: any, filename = 'hymn_library.json') {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
-
-function isTitleLine(s: string) {
-  if (s.length > 90) return false;
-  if (/^\d+(\.|:)\s/.test(s)) return false;
-  if (/^(Chorus|Refrain)\b/i.test(s)) return false;
-
-  const letters = s.replace(/[^A-Za-z]/g, "");
-  if (letters.length >= 3 && s === s.toUpperCase()) return true;
-
-  const words = s.split(/\s+/).filter(Boolean);
-  if (!words.length) return false;
-  const capish = words.filter((w) => /^[A-Z]/.test(w)).length / words.length;
-  return capish > 0.6 && !/[.?!]$/.test(s);
-}
-/* -------------------------------------------------------------------------- */
 
 export default function HymnTextImportPage() {
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [hymns, setHymns] = useState<ImportedHymn[]>([]);
-  const [rawPreview, setRawPreview] = useState<string>("");
+  const [fileName, setFileName] = useState<string>('');
+  const [rawHtml, setRawHtml] = useState<string>('');
+  const [parsed, setParsed] = useState<Hymn[]>([]);
 
-  const fileRef = useRef<HTMLInputElement>(null);
+  const onReset = useCallback(() => {
+    setFileName('');
+    setRawHtml('');
+    setParsed([]);
+  }, []);
 
-  const parsedCount = hymns.length;
-  const sample = useMemo(() => hymns.slice(0, 5), [hymns]);
-
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setError(null);
-    setHymns([]);
-    setRawPreview("");
-
-    const file = e.target.files?.[0];
+  const handleFile = useCallback(async (file: File) => {
+    onReset();
     if (!file) return;
-
+    setBusy(true);
     try {
-      if (!window.mammoth) {
-        setError("Mammoth script not yet loaded. Please wait a second and try again.");
-        return;
-      }
-
-      setBusy(true);
-
-      // Read file as ArrayBuffer in the browser
+      setFileName(file.name);
       const arrayBuffer = await file.arrayBuffer();
 
-      // Convert to HTML and preserve Heading 1 / 2 so we can detect titles
-      const options = {
-        styleMap: [
-          "p[style-name='Heading 1'] => h1:fresh",
-          "p[style-name='Heading 2'] => h2:fresh",
-        ],
-      };
-      const { value: html } = await window.mammoth.convertToHtml(
-        { arrayBuffer },
-        options
-      );
+      // lazy-load mammoth on client only
+      const mammoth = await import('mammoth/mammoth.browser');
+      const { value: html } = await mammoth.convertToHtml({ arrayBuffer });
 
-      // Keep a tiny preview of the raw HTML (helpful if parsing needs tweaking)
-      setRawPreview(html.slice(0, 5000));
-
-      /* >>> CHANGE: use the new robust parser first, then gracefully fall back */
-      const primary = extractHymnsFromHtml(html);
-      let normalized: ImportedHymn[] = primary.map((h, i) => ({
-        number: i + 1,
-        title: h.title,
-        verses: h.verses,
-      }));
-
-      if (!normalized.length) {
-        // Fallback to the older DOMParser-based approach if needed
-        normalized = parseHymnsFromHtml(html);
-      }
-
-      setHymns(normalized);
-      /* <<< END CHANGE */
-    } catch (err: any) {
-      setError(err?.message ?? String(err));
+      setRawHtml(html || '');
+      const hymns = extractHymnsFromHtml(html || '');
+      setParsed(hymns);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to read/convert that DOCX. Please ensure it is a valid Word file.');
     } finally {
       setBusy(false);
     }
-  }
+  }, [onReset]);
 
-  /* ------------------------------------------------------------------------ */
-  /* Your existing DOMParser-based parser kept intact (fallback path).        */
-  /* ------------------------------------------------------------------------ */
-  function parseHymnsFromHtml(html: string): ImportedHymn[] {
-    // Parse HTML to DOM
-    const doc = new DOMParser().parseFromString(html, "text/html");
-
-    // Treat both h1 and h2 as hymn titles (depending on how Word styles were used)
-    const headings = Array.from(doc.querySelectorAll("h1, h2"));
-
-    const results: ImportedHymn[] = [];
-
-    for (let i = 0; i < headings.length; i++) {
-      const titleEl = headings[i];
-      const title = clean(titleEl.textContent || "").replace(/^\d+\s*[.: -]\s*/, ""); // drop leading numbers like "1."
-
-      // collect paragraphs until next heading
-      const paras: string[] = [];
-      let sib = titleEl.nextElementSibling;
-
-      // walk forward until the next h1/h2 or end
-      while (sib && !/^(H1|H2)$/.test(sib.tagName)) {
-        if (sib.tagName === "P" || sib.tagName === "DIV" || sib.tagName === "SPAN") {
-          const t = clean((sib.textContent || "").trim());
-          if (t) paras.push(t);
-        }
-        sib = sib.nextElementSibling as Element | null;
-      }
-
-      const verses = splitIntoVerses(paras);
-
-      if (title) {
-        results.push({
-          number: results.length + 1,
-          title,
-          verses: verses.length ? verses : [paras.join(" ")].filter(Boolean),
-        });
-      }
-    }
-
-    return results;
-  }
-
-  // Split paragraphs into verses using common patterns:
-  // starts with "Verse 1", "V1", "1.", "1:", "1 -", etc.
-  function splitIntoVerses(paragraphs: string[]): string[] {
-    const verses: string[] = [];
-    let current: string[] = [];
-
-    const startsVerse = (line: string) =>
-      /^(?:verse|v)?\s*\d+\s*[.:)\-–—]?\s*/i.test(line);
-
-    for (const line of paragraphs) {
-      if (startsVerse(line)) {
-        // push current and start a new verse
-        if (current.length) verses.push(current.join(" ").trim());
-        current = [line.replace(/^(?:verse|v)?\s*\d+\s*[.:)\-–—]?\s*/i, "").trim()];
-      } else {
-        current.push(line);
-      }
-    }
-    if (current.length) verses.push(current.join(" ").trim());
-
-    // If we still have no verses, try splitting by blank paragraph blocks
-    if (!verses.length) {
-      const joined = paragraphs.join("\n").trim();
-      return joined
-        .split(/\n\s*\n+/)
-        .map((s) => s.trim())
-        .filter(Boolean);
-    }
-    return verses;
-  }
-
-  function clean(s: string) {
-    return s.replace(/\u00A0/g, " ").replace(/\s+/g, " ").trim();
-  }
-
-  function downloadJson() {
-    if (!hymns.length) return;
-    // Shape your app likely expects:
-    // { hymns: [{ number, title, verses }] }
-    const payload = { hymns };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "hymn_library.json";
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function reset() {
-    setError(null);
-    setHymns([]);
-    setRawPreview("");
-    fileRef.current?.value && (fileRef.current.value = "");
-  }
+  const resultJson: ImportResult = useMemo(
+    () => ({ hymns: parsed }),
+    [parsed]
+  );
 
   return (
-    <>
-      {/* Load the browser build of Mammoth from a CDN */}
-      <Script
-        src="https://unpkg.com/mammoth@1.6.0/mammoth.browser.min.js"
-        strategy="beforeInteractive"
-      />
-      <div className="min-h-screen bg-zinc-950 text-zinc-100 p-6">
-        <div className="max-w-5xl mx-auto space-y-6">
-          <h1 className="text-2xl font-semibold">
-            Hymn Text Importer <span className="text-zinc-400 text-base">(DOCX → JSON)</span>
-          </h1>
+    <div className="min-h-screen bg-[#0f1115] text-zinc-200">
+      {/* Header bar (matches your app’s look) */}
+      <header className="sticky top-0 z-10 w-full border-b border-white/10 bg-gradient-to-r from-fuchsia-600 via-violet-600 to-indigo-600 px-5 py-3">
+        <div className="mx-auto max-w-6xl font-semibold">
+          Worship Presentation App — MFM Goshen Assembly
+        </div>
+      </header>
 
-          <Box title="1) Upload your DOCX">
-            <div className="flex items-center gap-3">
+      <main className="mx-auto max-w-6xl px-4 py-8 space-y-6">
+        <h1 className="text-xl font-semibold">Hymn Text Importer <span className="text-sm text-zinc-400">(DOCX → JSON)</span></h1>
+
+        {/* 1) Upload */}
+        <section className="rounded-xl border border-white/10 bg-white/5 p-4">
+          <div className="mb-2 text-sm font-medium text-zinc-300">1) Upload your DOCX</div>
+          <div className="flex items-center gap-3">
+            <label className="inline-flex cursor-pointer items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium hover:bg-indigo-500">
               <input
-                ref={fileRef}
                 type="file"
                 accept=".docx"
-                onChange={handleFileChange}
-                className="text-sm file:mr-3 file:rounded-lg file:bg-fuchsia-600 file:hover:bg-fuchsia-500 file:text-white file:px-3 file:py-2 file:border-0 file:cursor-pointer"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleFile(f);
+                }}
               />
-              <button
-                onClick={reset}
-                className="px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-sm"
-              >
-                Reset
-              </button>
-            </div>
-            <p className="text-xs text-zinc-400 mt-2">
-              Tip: Ensure each hymn title is formatted as <b>Heading 1</b> (or Heading 2) in Word.
-              Verse lines may begin with <em>1.</em>, <em>1:</em>, <em>Verse 1</em>, etc.
-            </p>
-          </Box>
+              Choose file
+            </label>
 
-          <div className="grid md:grid-cols-2 gap-6">
-            <Box title="2) Preview">
-              {busy && <div className="text-sm text-zinc-400">Processing…</div>}
-              {error && <div className="text-sm text-red-400">{error}</div>}
-              {!busy && !error && !parsedCount && (
-                <div className="text-sm text-zinc-400">No file processed yet.</div>
-              )}
-              {!!parsedCount && (
-                <div className="space-y-4">
-                  <div className="text-sm">
-                    Parsed <b>{parsedCount}</b> hymns.
-                  </div>
-                  <div className="space-y-4 max-h-[420px] overflow-auto pr-2">
-                    {sample.map((h) => (
-                      <div
-                        key={h.number}
-                        className="rounded-xl bg-zinc-900/60 border border-zinc-800/60 p-3"
-                      >
-                        <div className="text-sm font-semibold">
-                          {h.number}. {h.title}
-                        </div>
-                        <ol className="mt-2 list-decimal ml-6 text-sm leading-relaxed text-zinc-300 space-y-1">
-                          {h.verses.map((v, i) => (
-                            <li key={i}>{v}</li>
-                          ))}
-                        </ol>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </Box>
+            <div className="text-sm text-zinc-400">{fileName || 'No file chosen'}</div>
 
-            <Box title="3) Raw HTML (debug)">
-              <div className="text-xs text-zinc-400 whitespace-pre-wrap max-h-[420px] overflow-auto">
-                {rawPreview || "—"}
-              </div>
-            </Box>
+            <button
+              className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
+              onClick={onReset}
+              disabled={busy}
+            >
+              Reset
+            </button>
           </div>
 
-          <Box title="4) Export">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={downloadJson}
-                disabled={!parsedCount}
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
-              >
-                Download hymn_library.json
-              </button>
-              <div className="text-xs text-zinc-400">
-                Put the file at <code>/public/data/hymn_library.json</code> in your repo and commit.
-              </div>
-            </div>
-          </Box>
-        </div>
-      </div>
-    </>
+          <p className="mt-3 text-xs text-zinc-500">
+            Tip: Make each hymn title a <strong>Heading 1 or Heading 2</strong> in Word.
+            Begin verses with <strong>1.</strong> <strong>2.</strong> etc., or separate verses with a <strong>blank line</strong>.
+          </p>
+        </section>
+
+        {/* 2) Preview parsed hymns */}
+        <section className="rounded-xl border border-white/10 bg-white/5 p-4">
+          <div className="mb-2 text-sm font-medium text-zinc-300">
+            2) Preview <span className="text-zinc-500">({parsed.length ? `Parsed ${parsed.length} hymns.` : 'No file processed yet.'})</span>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <textarea
+              readOnly
+              className="h-72 w-full resize-none rounded-lg border border-white/10 bg-black/40 p-3 font-mono text-xs text-zinc-300"
+              value={
+                parsed.length
+                  ? parsed
+                      .map(
+                        (h) =>
+                          `${h.number}. ${h.title}\n${h.verses
+                            .map((v, i) => `${i + 1}. ${v}`)
+                            .join('\n')}\n`
+                      )
+                      .join('\n')
+                  : ''
+              }
+              placeholder="Parsed hymns will appear here…"
+            />
+            <textarea
+              readOnly
+              className="h-72 w-full resize-none rounded-lg border border-white/10 bg-black/40 p-3 font-mono text-xs text-purple-200/90"
+              value={rawHtml}
+              placeholder="Raw HTML (debug)…"
+            />
+          </div>
+        </section>
+
+        {/* 3) Export */}
+        <section className="rounded-xl border border-white/10 bg-white/5 p-4">
+          <div className="mb-2 text-sm font-medium text-zinc-300">3) Export</div>
+          <button
+            className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+            onClick={() => downloadJson(resultJson, 'hymn_library.json')}
+            disabled={!parsed.length || busy}
+          >
+            Download hymn_library.json
+          </button>
+          <p className="mt-3 text-xs text-zinc-500">
+            Put the file at <code className="rounded bg-black/50 px-1 py-0.5">/public/data/hymn_library.json</code> in your repo and commit.
+          </p>
+        </section>
+      </main>
+    </div>
   );
 }
