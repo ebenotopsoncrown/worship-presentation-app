@@ -1,16 +1,5 @@
 // utils/firebase.ts
-import { initializeApp, getApps } from "firebase/app";
-import {
-  getDatabase,
-  ref,
-  set,
-  onValue,
-  off,
-  serverTimestamp,
-  get,
-  update,
-  DataSnapshot,
-} from "firebase/database";
+import { getDatabase, ref as dbRef, onValue, get, set } from 'firebase/database';
 import {
   getAuth,
   signInWithEmailAndPassword,
