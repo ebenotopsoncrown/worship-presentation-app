@@ -23,13 +23,16 @@ declare global {
     mammoth?: any;
   }
 }
-// --- HYMN PARSER (add once, above your component) ----------------------------
+
+/* -------------------------------------------------------------------------- */
+/* NEW ROBUST PARSER (kept exactly as designed earlier)                       */
+/* -------------------------------------------------------------------------- */
 type Hymn = { id: string; title: string; verses: string[] };
 
 function extractHymnsFromHtml(html: string): Hymn[] {
   const normalized = html
-    .replace(/\r/g, '')
-    .replace(/<\/p>\s*<p>/gi, '</p>\n<p>');
+    .replace(/\r/g, "")
+    .replace(/<\/p>\s*<p>/gi, "</p>\n<p>");
 
   const hasHeadings = /<h1|<h2/i.test(normalized);
   if (hasHeadings) return parseByHeadings(normalized);
@@ -48,7 +51,7 @@ function parseByHeadings(html: string): Hymn[] {
     if (!title) continue;
 
     const h: Hymn = { id: toId(title), title, verses: [] };
-    const body = chunk.replace(/^(.*?<\/(h1|h2)>)/is, '');
+    const body = chunk.replace(/^(.*?<\/(h1|h2)>)/is, "");
     pushBody(body, h);
 
     if (h.verses.length) hymns.push(h);
@@ -59,7 +62,7 @@ function parseByHeadings(html: string): Hymn[] {
 function parseByParagraphs(html: string): Hymn[] {
   const blocks = html
     .split(/<\/p>/i)
-    .map(s => stripTags(s).trim())
+    .map((s) => stripTags(s).trim())
     .filter(Boolean);
 
   const hymns: Hymn[] = [];
@@ -83,14 +86,14 @@ function parseByParagraphs(html: string): Hymn[] {
     appendToVerses(current, line);
   }
 
-  return hymns.filter(h => h.verses.length);
+  return hymns.filter((h) => h.verses.length);
 }
 
 function pushBody(rawHtml: string, h: Hymn) {
   const paras = rawHtml
-    .replace(/\r/g, '')
+    .replace(/\r/g, "")
     .split(/<\/p>/i)
-    .map(s => stripTags(s).trim())
+    .map((s) => stripTags(s).trim())
     .filter(Boolean);
 
   for (const p of paras) appendToVerses(h, p);
@@ -98,26 +101,22 @@ function pushBody(rawHtml: string, h: Hymn) {
 
 function appendToVerses(h: Hymn, line: string) {
   if (/^\d+(\.|:)\s*/.test(line) || /^(Chorus|Refrain)\b/i.test(line)) {
-    h.verses.push(line.replace(/^\d+(\.|:)\s*/, ''));
+    h.verses.push(line.replace(/^\d+(\.|:)\s*/, ""));
     return;
   }
   if (!h.verses.length) {
     h.verses.push(line);
   } else {
-    h.verses[h.verses.length - 1] =
-      `${h.verses[h.verses.length - 1]}\n${line}`.trim();
+    h.verses[h.verses.length - 1] = `${h.verses[h.verses.length - 1]}\n${line}`.trim();
   }
 }
 
 function stripTags(s: string) {
-  return s.replace(/<\/?[^>]+>/g, '');
+  return s.replace(/<\/?[^>]+>/g, "");
 }
 
 function toId(title: string) {
-  return title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
 function isTitleLine(s: string) {
@@ -125,15 +124,16 @@ function isTitleLine(s: string) {
   if (/^\d+(\.|:)\s/.test(s)) return false;
   if (/^(Chorus|Refrain)\b/i.test(s)) return false;
 
-  const letters = s.replace(/[^A-Za-z]/g, '');
+  const letters = s.replace(/[^A-Za-z]/g, "");
   if (letters.length >= 3 && s === s.toUpperCase()) return true;
 
   const words = s.split(/\s+/).filter(Boolean);
   if (!words.length) return false;
-  const capish = words.filter(w => /^[A-Z]/.test(w)).length / words.length;
+  const capish = words.filter((w) => /^[A-Z]/.test(w)).length / words.length;
   return capish > 0.6 && !/[.?!]$/.test(s);
 }
-// --- HYMN PARSER END ---------------------------------------------------------
+/* -------------------------------------------------------------------------- */
+
 export default function HymnTextImportPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -143,7 +143,6 @@ export default function HymnTextImportPage() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const parsedCount = hymns.length;
-
   const sample = useMemo(() => hymns.slice(0, 5), [hymns]);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -180,8 +179,21 @@ export default function HymnTextImportPage() {
       // Keep a tiny preview of the raw HTML (helpful if parsing needs tweaking)
       setRawPreview(html.slice(0, 5000));
 
-      const parsed = parseHymnsFromHtml(html);
-      setHymns(parsed);
+      /* >>> CHANGE: use the new robust parser first, then gracefully fall back */
+      const primary = extractHymnsFromHtml(html);
+      let normalized: ImportedHymn[] = primary.map((h, i) => ({
+        number: i + 1,
+        title: h.title,
+        verses: h.verses,
+      }));
+
+      if (!normalized.length) {
+        // Fallback to the older DOMParser-based approach if needed
+        normalized = parseHymnsFromHtml(html);
+      }
+
+      setHymns(normalized);
+      /* <<< END CHANGE */
     } catch (err: any) {
       setError(err?.message ?? String(err));
     } finally {
@@ -189,6 +201,9 @@ export default function HymnTextImportPage() {
     }
   }
 
+  /* ------------------------------------------------------------------------ */
+  /* Your existing DOMParser-based parser kept intact (fallback path).        */
+  /* ------------------------------------------------------------------------ */
   function parseHymnsFromHtml(html: string): ImportedHymn[] {
     // Parse HTML to DOM
     const doc = new DOMParser().parseFromString(html, "text/html");
@@ -209,7 +224,7 @@ export default function HymnTextImportPage() {
       // walk forward until the next h1/h2 or end
       while (sib && !/^(H1|H2)$/.test(sib.tagName)) {
         if (sib.tagName === "P" || sib.tagName === "DIV" || sib.tagName === "SPAN") {
-          const t = clean(sib.textContent || "");
+          const t = clean((sib.textContent || "").trim());
           if (t) paras.push(t);
         }
         sib = sib.nextElementSibling as Element | null;
@@ -340,7 +355,9 @@ export default function HymnTextImportPage() {
                         key={h.number}
                         className="rounded-xl bg-zinc-900/60 border border-zinc-800/60 p-3"
                       >
-                        <div className="text-sm font-semibold">{h.number}. {h.title}</div>
+                        <div className="text-sm font-semibold">
+                          {h.number}. {h.title}
+                        </div>
                         <ol className="mt-2 list-decimal ml-6 text-sm leading-relaxed text-zinc-300 space-y-1">
                           {h.verses.map((v, i) => (
                             <li key={i}>{v}</li>
@@ -379,4 +396,3 @@ export default function HymnTextImportPage() {
     </>
   );
 }
-
