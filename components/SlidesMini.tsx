@@ -78,62 +78,87 @@ export default function SlidesMini() {
 
   // ---- images / slides ---------------------------------------
 
-  const addImgElement = (url: string) => {
-    const img = document.createElement('img');
-    img.src = url;
-    // auto-fit inside the editor box
-    img.style.maxWidth = '100%';
-    img.style.maxHeight = '100%';
-    img.style.height = 'auto';
-    img.style.objectFit = 'contain';
-    img.style.margin = '18px auto';
-    img.style.display = 'block';
-    const range = window.getSelection()?.rangeCount ? window.getSelection()!.getRangeAt(0) : null;
-    if (range) range.insertNode(img);
-    else editorRef.current?.appendChild(img);
-  };
+  // --- replace addImgElement, handleFiles, onInsertImage with this ---
 
-  const handleFiles = async (files: FileList) => {
-    const imageFiles: File[] = [];
-    const unsupported: File[] = [];
+const addImgElement = (src: string) => {
+  // focus first so selection is inside the editor
+  editorRef.current?.focus();
 
-    Array.from(files).forEach((f) => {
-      const lower = f.name.toLowerCase();
-      if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.gif') || lower.endsWith('.webp') || lower.endsWith('.svg')) {
-        imageFiles.push(f);
-      } else if (lower.endsWith('.ppt') || lower.endsWith('.pptx') || lower.endsWith('.pdf')) {
-        unsupported.push(f);
-      }
+  const img = document.createElement('img');
+  img.src = src;
+  img.style.maxWidth = '100%';
+  img.style.maxHeight = '100%';
+  img.style.height = 'auto';
+  img.style.objectFit = 'contain';
+  img.style.margin = '18px auto';
+  img.style.display = 'block';
+
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount > 0) {
+    const range = sel.getRangeAt(0);
+    range.insertNode(img);
+    // move caret after the image
+    range.setStartAfter(img);
+    range.setEndAfter(img);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } else {
+    editorRef.current?.appendChild(img);
+  }
+  return img;
+};
+
+const handleFiles = async (files: FileList) => {
+  const imageFiles: File[] = [];
+  const unsupported: File[] = [];
+
+  Array.from(files).forEach((f) => {
+    const lower = f.name.toLowerCase();
+    if (/\.(png|jpe?g|gif|webp|svg)$/.test(lower)) imageFiles.push(f);
+    else if (/\.(pptx?|pdf)$/.test(lower)) unsupported.push(f);
+  });
+
+  if (unsupported.length) {
+    alert(
+      'PPT/PPTX/PDF import is not supported directly in the browser.\n' +
+      'Please export slides as images (PNG/JPG) and upload those.\n\n' +
+      `Ignored: ${unsupported.map((f) => f.name).join(', ')}`
+    );
+  }
+
+  for (const f of imageFiles) {
+    // 1) Show immediately (data URL preview)
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsDataURL(f);
     });
 
-    if (unsupported.length) {
-      alert(
-        'PPT/PPTX/PDF import is not directly supported in the browser.\n' +
-        'Please export your slides as images (PNG/JPG) and upload those.\n\n' +
-        `Files ignored: ${unsupported.map((f) => f.name).join(', ')}`
-      );
-    }
+    const imgEl = addImgElement(dataUrl);
 
-    for (const f of imageFiles) {
-      try {
-        // Prefer storage upload so live screens load quickly from CDN
-        const url = await uploadSlideImage(f);
-        addImgElement(url);
-      } catch {
-        // Fallback: inline as data URL
-        const reader = new FileReader();
-        reader.onload = () => addImgElement(String(reader.result));
-        reader.readAsDataURL(f);
+    // 2) Try to upload in the background and upgrade to CDN URL
+    try {
+      // optional: only call if function exists
+      if (typeof uploadSlideImage === 'function') {
+        const cdnUrl = await uploadSlideImage(f);
+        if (cdnUrl) imgEl.src = cdnUrl;
       }
+    } catch (err) {
+      // keep the data URL if upload fails
+      console.error('SLIDES: upload failed, keeping local preview', err);
     }
-  };
+  }
+};
 
-  const onInsertImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.length) {
-      await handleFiles(e.target.files);
-      e.target.value = ''; // allow re-selecting the same files
-    }
-  };
+const onInsertImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  try {
+    if (e.target.files?.length) await handleFiles(e.target.files);
+  } finally {
+    // allow selecting the same file again
+    e.target.value = '';
+  }
+};
 
   const onBackgroundImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -348,3 +373,4 @@ export default function SlidesMini() {
     </div>
   );
 }
+
