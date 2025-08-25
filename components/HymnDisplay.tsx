@@ -2,15 +2,35 @@
 import React from 'react';
 import { db, ref, onValue, setPreviewSlot } from '../utils/firebase';
 
-type Hymn = {
-  id: string;
-  number?: number;
-  title?: string;
-  firstLine?: string;
-  verses: string[] | string[][];
-  chorus?: string[];
-  searchTokens?: string[];
-};
+import { useEffect, useState } from 'react';
+import { db, ref, onValue } from '../utils/firebase';
+
+type Hymn = { title: string; verses: string[]; number?: number; meter?: string };
+
+const [hymns, setHymns] = useState<Hymn[]>([]);
+const [loading, setLoading] = useState(true);
+
+useEffect(() => {
+  const hymnsRef = ref(db, 'hymns'); // root-level "hymns"
+  const off = onValue(
+    hymnsRef,
+    (snap) => {
+      const data = snap.val();
+      const list: Hymn[] = Array.isArray(data)
+        ? (data.filter(Boolean) as Hymn[]) // remove null holes if it’s an array
+        : data
+        ? (Object.values(data) as Hymn[])
+        : [];
+      setHymns(list);
+      setLoading(false);
+    },
+    (err) => {
+      console.error('Hymns read error:', err); // shows PERMISSION_DENIED etc.
+      setLoading(false);
+    }
+  );
+  return () => off();
+}, []);
 
 function hymnToSlides(h: Hymn) {
   const mk = (html: string) =>
