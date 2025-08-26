@@ -2,14 +2,15 @@
 import { initializeApp, getApps } from "firebase/app";
 import {
   getDatabase,
-  ref,
-  set,
+  ref as dbRef,
   onValue,
+  set,
   off,
   serverTimestamp,
   get,
   update,
   DataSnapshot,
+type DatabaseReference,
 } from "firebase/database";
 import {
   getAuth,
@@ -34,10 +35,23 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
 };
 
-const app = getApps().length ? getApps()[0]! : initializeApp(firebaseConfig);
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 export const db = getDatabase(app);
 export const auth = getAuth(app);
-export const storage = getStorage(app);
+export const storage = (() => {
+  try {
+    return getStorage(app);
+ } catch {
+    // storage not enabled — that's ok; uploadSlideImage will no-op
+    return null as any;
+  }
+})();
+
+// --- Refs used in the UI -------------------------------------
+export type Slot = 1 | 2 | 3 | 4;
+
+export const previewRef = (slot: Slot) => dbRef(db, `previews/${slot}`);
+export const liveRef = () => dbRef(db, 'live');
 
 // ---- Re-exports (compat with existing imports) ----
 export { ref, onValue, set, off, update } from "firebase/database";
