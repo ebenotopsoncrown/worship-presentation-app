@@ -27,14 +27,16 @@ function normaliseVersion(ver?: string) {
   return VERSION_MAP[key] || "kjv";
 }
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse<Ok | Err>
-) {
-  if (req.method !== "GET") {
-    res.setHeader("Allow", "GET");
-    return res.status(405).json({ error: "Method Not Allowed" });
-  }
+// lib/bible.ts
+export async function fetchVerses(ref: string, version: string) {
+  const url = `https://bible-api.com/${encodeURIComponent(ref)}?translation=${version.toLowerCase()}`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`Bible API ${r.status}`);
+  const data = await r.json() as any;
+  // bible-api returns `text` (string) or `verses` (array)
+  return (data.text?.trim()) ||
+         (Array.isArray(data.verses) ? data.verses.map((v: any) => v.text).join('\n').trim() : '');
+}
 
   const q = (req.query.q ?? "").toString().trim().replace(/\s+/g, " ");
   const ver = normaliseVersion((req.query.ver ?? "").toString());
@@ -78,3 +80,4 @@ export default async function handler(
     return res.status(500).json({ error: err?.message || "Bible fetch failed" });
   }
 }
+
