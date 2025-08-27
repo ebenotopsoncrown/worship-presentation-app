@@ -37,9 +37,7 @@ export default function SlidesMini() {
   const [bgColor, setBgColor] = useState('#0b0f1a');
   const [bgImage, setBgImage] = useState<string | null>(null);
 
-  // ------------------------------------------------------------
-  // helpers
-  // ------------------------------------------------------------
+  // exec helpers
   const exec = (cmd: string, value: string | null = null) =>
     document.execCommand(cmd, false, value ?? undefined);
 
@@ -50,7 +48,6 @@ export default function SlidesMini() {
 
   const applyFontSize = (px: number) => {
     setFontSize(px);
-    // use browser largest, then normalize <font> to inline span with px
     exec('fontSize', '7');
     const root = editorRef.current!;
     root.querySelectorAll('font[size]').forEach((f) => {
@@ -76,89 +73,78 @@ export default function SlidesMini() {
     }
   };
 
-  // ---- images / slides ---------------------------------------
+  // ---- image / slide insertion (PNG/JPG/WEBP etc.) -----------
+  const addImgElement = (src: string) => {
+    editorRef.current?.focus();
+    const img = document.createElement('img');
+    img.src = src;
+    img.style.maxWidth = '100%';
+    img.style.maxHeight = '100%';
+    img.style.height = 'auto';
+    img.style.objectFit = 'contain';
+    img.style.margin = '18px auto';
+    img.style.display = 'block';
 
-  // --- replace addImgElement, handleFiles, onInsertImage with this ---
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      range.insertNode(img);
+      range.setStartAfter(img);
+      range.setEndAfter(img);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } else {
+      editorRef.current?.appendChild(img);
+    }
+    return img;
+  };
 
-const addImgElement = (src: string) => {
-  // focus first so selection is inside the editor
-  editorRef.current?.focus();
+  const handleFiles = async (files: FileList) => {
+    const imageFiles: File[] = [];
+    const unsupported: File[] = [];
 
-  const img = document.createElement('img');
-  img.src = src;
-  img.style.maxWidth = '100%';
-  img.style.maxHeight = '100%';
-  img.style.height = 'auto';
-  img.style.objectFit = 'contain';
-  img.style.margin = '18px auto';
-  img.style.display = 'block';
-
-  const sel = window.getSelection();
-  if (sel && sel.rangeCount > 0) {
-    const range = sel.getRangeAt(0);
-    range.insertNode(img);
-    // move caret after the image
-    range.setStartAfter(img);
-    range.setEndAfter(img);
-    sel.removeAllRanges();
-    sel.addRange(range);
-  } else {
-    editorRef.current?.appendChild(img);
-  }
-  return img;
-};
-
-const handleFiles = async (files: FileList) => {
-  const imageFiles: File[] = [];
-  const unsupported: File[] = [];
-
-  Array.from(files).forEach((f) => {
-    const lower = f.name.toLowerCase();
-    if (/\.(png|jpe?g|gif|webp|svg)$/.test(lower)) imageFiles.push(f);
-    else if (/\.(pptx?|pdf)$/.test(lower)) unsupported.push(f);
-  });
-
-  if (unsupported.length) {
-    alert(
-      'PPT/PPTX/PDF import is not supported directly in the browser.\n' +
-      'Please export slides as images (PNG/JPG) and upload those.\n\n' +
-      `Ignored: ${unsupported.map((f) => f.name).join(', ')}`
-    );
-  }
-
-  for (const f of imageFiles) {
-    // 1) Show immediately (data URL preview)
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = reject;
-      reader.readAsDataURL(f);
+    Array.from(files).forEach((f) => {
+      const lower = f.name.toLowerCase();
+      if (/\.(png|jpe?g|gif|webp|svg)$/.test(lower)) imageFiles.push(f);
+      else if (/\.(pptx?|pdf)$/.test(lower)) unsupported.push(f);
     });
 
-    const imgEl = addImgElement(dataUrl);
+    if (unsupported.length) {
+      alert(
+        'PPT/PPTX/PDF import is not supported directly in the browser.\n' +
+          'Please export your slides as images (PNG/JPG) and upload those.\n\n' +
+          `Ignored: ${unsupported.map((f) => f.name).join(', ')}`
+      );
+    }
 
-    // 2) Try to upload in the background and upgrade to CDN URL
-    try {
-      // optional: only call if function exists
-      if (typeof uploadSlideImage === 'function') {
+    for (const f of imageFiles) {
+      // show immediately
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = reject;
+        reader.readAsDataURL(f);
+      });
+
+      const imgEl = addImgElement(dataUrl);
+
+      // upload in the background (if Storage configured)
+      try {
         const cdnUrl = await uploadSlideImage(f);
         if (cdnUrl) imgEl.src = cdnUrl;
+      } catch (err) {
+        console.error('Slide image upload failed — keeping local preview', err);
       }
-    } catch (err) {
-      // keep the data URL if upload fails
-      console.error('SLIDES: upload failed, keeping local preview', err);
     }
-  }
-};
+  };
 
-const onInsertImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  try {
-    if (e.target.files?.length) await handleFiles(e.target.files);
-  } finally {
-    // allow selecting the same file again
-    e.target.value = '';
-  }
-};
+  const onInsertImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      if (e.target.files?.length) await handleFiles(e.target.files);
+    } finally {
+      e.target.value = '';
+    }
+  };
 
   const onBackgroundImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -187,7 +173,6 @@ const onInsertImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
       .filter(Boolean)
       .join(';');
 
-    // The inner content already contains <img> with object-fit: contain sizing
     return `<div style="${style}; font-family:${font}">${inner}</div>`;
   }, [bgColor, bgImage, font]);
 
@@ -206,9 +191,6 @@ const onInsertImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     }
   };
 
-  // ------------------------------------------------------------
-  // render
-  // ------------------------------------------------------------
   return (
     <div className="panel panel--slides h-[640px] flex flex-col">
       <div className="panel-header">Slides</div>
@@ -228,7 +210,6 @@ const onInsertImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
             type="file"
             className="hidden"
             multiple
-            // accept images; we also let the user pick ppt/pptx/pdf to show the friendly notice
             accept="image/*,.ppt,.pptx,.pdf"
             onChange={onInsertImage}
           />
@@ -253,9 +234,8 @@ const onInsertImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
         </div>
       </div>
 
-      {/* Toolbar (basic text + background) */}
+      {/* Toolbar */}
       <div className="bg-zinc-900/60 rounded-xl border border-zinc-800 p-2 mb-2 flex flex-wrap items-center gap-2">
-        {/* font family */}
         <select
           value={font}
           onChange={(e) => applyFontFamily(e.target.value)}
@@ -269,7 +249,6 @@ const onInsertImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
           ))}
         </select>
 
-        {/* font size */}
         <select
           value={fontSize}
           onChange={(e) => applyFontSize(Number(e.target.value))}
@@ -283,7 +262,6 @@ const onInsertImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
           ))}
         </select>
 
-        {/* color */}
         <label className="inline-flex items-center gap-2 px-2 py-1 rounded bg-zinc-800">
           <span className="text-xs text-zinc-300">Text</span>
           <input
@@ -296,7 +274,6 @@ const onInsertImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
 
         <div className="h-6 w-px bg-zinc-700 mx-1" />
 
-        {/* B / I / U */}
         <button className="btn btn-ghost" onClick={() => exec('bold')} title="Bold">
           <span className="font-bold">B</span>
         </button>
@@ -309,7 +286,6 @@ const onInsertImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
 
         <div className="h-6 w-px bg-zinc-700 mx-1" />
 
-        {/* Align */}
         <button className="btn btn-ghost" onClick={() => exec('justifyLeft')} title="Align left">
           L
         </button>
@@ -322,12 +298,10 @@ const onInsertImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
 
         <div className="h-6 w-px bg-zinc-700 mx-1" />
 
-        {/* HR */}
         <button className="btn btn-ghost" onClick={insertHR} title="Insert line">
           ———
         </button>
 
-        {/* Background controls */}
         <div className="h-6 w-px bg-zinc-700 mx-1" />
         <label className="inline-flex items-center gap-2 px-2 py-1 rounded bg-zinc-900/60 border border-zinc-800">
           <span className="text-xs text-zinc-300">Background</span>
@@ -349,7 +323,7 @@ const onInsertImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
         )}
       </div>
 
-      {/* Workspace (fills remaining height) */}
+      {/* Workspace */}
       <div className="flex-1 min-h-0">
         <div
           className="bg-zinc-950 rounded-xl border border-zinc-800 shadow-inner overflow-auto h-full"
@@ -373,4 +347,3 @@ const onInsertImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     </div>
   );
 }
-
