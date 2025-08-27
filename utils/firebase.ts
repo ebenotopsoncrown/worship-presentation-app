@@ -1,96 +1,88 @@
 // utils/firebase.ts
-'use client';
-
-import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
-import {
-  getDatabase,
-  ref as dbRef,
-  onValue as dbOnValue,
-  off as dbOff,
-  set as dbSet,
-  DataSnapshot,
-  Database,
-} from 'firebase/database';
+// Works with Firebase v9 modular API, but keeps v8-style conveniences
+import { initializeApp, getApps, getApp } from "firebase/app";
 import {
   getAuth,
-  onAuthStateChanged as authOnAuthStateChanged,
+  onAuthStateChanged as _onAuthStateChanged,
   GoogleAuthProvider,
   signInWithPopup,
   signOut,
-  Auth,
-} from 'firebase/auth';
+} from "firebase/auth";
+import {
+  getDatabase,
+  ref as _ref,
+  onValue as _onValue,
+  off as _off,
+  set as _set,
+  update as _update,
+  remove as _remove,
+  DatabaseReference,
+} from "firebase/database";
 
-// ---- CONFIG ----
-// Prefer environment variables. Ensure DATABASE_URL is set.
+/** IMPORTANT: make sure these env vars exist in Vercel project settings */
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET!,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID!,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
-  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL!, // REQUIRED for RTDB
+  apiKey: process.env.NEXT_PUBLIC_FB_API_KEY!,
+  authDomain: process.env.NEXT_PUBLIC_FB_AUTH_DOMAIN!,
+  databaseURL: process.env.NEXT_PUBLIC_FB_DB_URL!,   // <- REQUIRED
+  projectId: process.env.NEXT_PUBLIC_FB_PROJECT_ID!,
+  storageBucket: process.env.NEXT_PUBLIC_FB_STORAGE_BUCKET!,
+  messagingSenderId: process.env.NEXT_PUBLIC_FB_SENDER_ID!,
+  appId: process.env.NEXT_PUBLIC_FB_APP_ID!,
 };
 
-// Single app instance (avoids “already exists” in dev/hot reload)
-const app: FirebaseApp =
-  getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-// Core services
-export const db: Database = getDatabase(app);
-export const auth: Auth = getAuth(app);
+export const auth = getAuth(app);
+export const db = getDatabase(app);
 
-// Re-export onAuthStateChanged so components can import from ../utils/firebase
-export const onAuthStateChanged = authOnAuthStateChanged;
+/** Back-compat so code that does `auth.onAuthStateChanged(...)` keeps working */
+ // @ts-expect-error attach legacy-like method
+auth.onAuthStateChanged = (next: any, error?: any, completed?: any) =>
+  _onAuthStateChanged(auth, next, error, completed);
 
-// Convenience ref(): bind db so callers can do ref('path')
-export const ref = (path: string) => dbRef(db, path);
+/** Wrapper so callers can keep doing `ref("path")` */
+export const ref = (path: string): DatabaseReference => _ref(db, path);
 
-// Re-export low-level RTDB helpers (names your code already uses)
-export const onValue = dbOnValue;
-export const off = dbOff;
-export const set = dbSet;
+/** Re-export these so imports from '../utils/firebase' still work */
+export const onValue = _onValue;
+export const off = _off;
+export const set = _set;
+export const update = _update;
+export const remove = _remove;
 
-// ---------- High-level helpers your UI expects ----------
+/** App-specific helpers used around the codebase */
+export type PreviewPayload = { html?: string; data?: any };
 
-/** Subscribe to a DB path and get an unsubscribe you can call in useEffect cleanup */
-const listenPath = <T = unknown>(
-  path: string,
-  cb: (value: T | null, snap: DataSnapshot) => void
-) => {
-  const r = ref(path);
-  const handler = (snap: DataSnapshot) => cb(snap.val() as T | null, snap);
-  dbOnValue(r, handler);
-  // Return explicit unsubscribe compatible with RTDB
-  return () => dbOff(r, 'value', handler);
-};
-
-/** Previews */
-export const setPreviewSlot = async (
-  slot: number,
-  payload: any // { html?: string, data?: unknown, ... }
-) => {
-  const ts = Date.now();
-  return dbSet(ref(`previews/${slot}`), { ...payload, ts });
+export const setPreviewSlot = async (slot: number, payload: PreviewPayload) => {
+  const r = _ref(db, `preview/${slot}`);
+  await _set(r, { updatedAt: Date.now(), ...payload });
 };
 
 export const listenPreviewSlot = (
   slot: number,
-  cb: (value: any | null) => void
-) => listenPath<any>(`previews/${slot}`, (val) => cb(val));
-
-/** Live */
-export const setLive = async (payload: any) => {
-  const ts = Date.now();
-  return dbSet(ref('live'), { ...payload, ts });
+  cb: (value: any) => void
+) => {
+  const r = _ref(db, `preview/${slot}`);
+  const unsub = _onValue(r, (snap) => cb(snap.val()));
+  // return an unsubscribe compatible with useEffect cleanups
+  return () => _off(r, "value", unsub as any);
 };
 
-export const listenLive = (cb: (value: any | null) => void) =>
-  listenPath<any>('live', (val) => cb(val));
+export const setLive = async (payload: PreviewPayload) => {
+  await _set(_ref(db, "live"), { updatedAt: Date.now(), ...payload });
+};
 
-/** Optional auth helpers if you use them somewhere */
-export const signInWithGoogle = async () => {
+export const subscribeToLive = (cb: (value: any) => void) => {
+  const r = _ref(db, "live");
+  return _onValue(r, (snap) => cb(snap.val()));
+};
+
+/** Optional helpers used elsewhere */
+export const hymnsRef = () => _ref(db, "hymns");
+
+export const signIn = async () => {
   const provider = new GoogleAuthProvider();
   await signInWithPopup(auth, provider);
 };
-export const logout = () => signOut(auth);
+
+export const signOutUser = () => signOut(auth);
