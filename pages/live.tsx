@@ -14,19 +14,18 @@ export default function LivePage() {
     [live]
   );
 
-  // Subscribe to live content
   useEffect(() => {
     const off = subscribeToLive((v) => setLive(v));
     return () => off();
   }, []);
 
-  // Fit content to container by scaling
+  // Fit content to the available area (works great on TVs)
   useEffect(() => {
     const fit = () => {
       const c = containerRef.current, el = contentRef.current;
       if (!c || !el) return;
-      el.style.transform = 'scale(1)';           // reset
-      // Wait a tick for DOM to lay out
+      el.style.transform = 'scale(1)';
+
       requestAnimationFrame(() => {
         const sw = el.scrollWidth || 1;
         const sh = el.scrollHeight || 1;
@@ -42,7 +41,6 @@ export default function LivePage() {
     if (containerRef.current) ro.observe(containerRef.current);
     if (contentRef.current)   ro.observe(contentRef.current);
     window.addEventListener('resize', fit);
-
     return () => {
       ro.disconnect();
       window.removeEventListener('resize', fit);
@@ -60,7 +58,6 @@ export default function LivePage() {
         .stage { position:relative; width:100%; height:100%; display:flex; align-items:center; justify-content:center; overflow:hidden; }
         .content {
           transform-origin: 50% 50%;
-          /* sensible defaults for text-centric slides */
           font-size: 56px;
           line-height: 1.22;
           text-align: center;
