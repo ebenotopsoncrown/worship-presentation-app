@@ -38,9 +38,7 @@ export default function BibleDisplay() {
 
     setBusy(true);
     try {
-      const r = await fetch(
-        `/api/bible?q=${encodeURIComponent(q)}&ver=${encodeURIComponent(ver)}`
-      );
+      const r = await fetch(`/api/bible?q=${encodeURIComponent(q)}&ver=${encodeURIComponent(ver)}`);
 
       const data = (await r.json()) as ApiOk & ApiErr;
       if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
