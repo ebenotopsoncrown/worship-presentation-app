@@ -1,6 +1,7 @@
 'use client';
+
 import React from 'react';
-import { setPreviewSlot } from '../utils/firebase';
+import { setPreviewSlot, type Slot } from '../utils/firebase';
 
 type Verse = { v: number; t: string };
 type ApiOk = { ref: string; verses: Verse[] };
@@ -8,7 +9,10 @@ type ApiErr = { error?: string };
 
 /** utils */
 const toHtml = (ref: string, verses: Verse[]) => {
-  const body = verses.map((v) => `<span class="opacity-60 mr-2">${v.v}</span>${v.t}`).join('<br/>');
+  const body = verses
+    .map((v) => `<span class="opacity-60 mr-2">${v.v}</span>${v.t}`)
+    .join('<br/>');
+
   return `
     <div style="font-size:.95rem;opacity:.8;margin-bottom:.25rem">${ref}</div>
     <div style="font-size:2.6rem;line-height:1.25">${body}</div>`;
@@ -17,7 +21,7 @@ const toHtml = (ref: string, verses: Verse[]) => {
 export default function BibleDisplay() {
   const [refText, setRefText] = React.useState('John 3:16-18');
   const [ver, setVer] = React.useState('KJV');
-  const [slot, setSlot] = React.useState(1);
+  const [slot, setSlot] = React.useState<Slot>(1);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [previewHtml, setPreviewHtml] = React.useState<string>('');
@@ -25,16 +29,21 @@ export default function BibleDisplay() {
   const preview = async () => {
     setError(null);
     setPreviewHtml('');
+
     const q = refText.trim();
     if (!q) {
       setError('Please enter a Bible reference.');
       return;
     }
+
     setBusy(true);
     try {
-      const r = await fetch(`/api/bible?q=${encodeURIComponent(q)}&ver=${encodeURIComponent(ver)}`);
+      const r = await fetch(
+        `/api/bible?q=${encodeURIComponent(q)}&ver=${encodeURIComponent(ver)}`
+      );
       const data = (await r.json()) as ApiOk & ApiErr;
       if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
+
       const verses = Array.isArray(data?.verses) ? data.verses : [];
       setPreviewHtml(toHtml(data.ref || q, verses));
     } catch (e: any) {
@@ -44,11 +53,12 @@ export default function BibleDisplay() {
     }
   };
 
+  // Send the previewed HTML to the selected preview slot
   const send = async () => {
     if (!previewHtml) return;
     await setPreviewSlot(slot, {
-      html: previewHtml,
-      meta: { type: 'bible', reference: refText, version: ver },
+      type: 'html',
+      content: previewHtml,
     });
   };
 
@@ -86,7 +96,7 @@ export default function BibleDisplay() {
         <select
           className="bg-zinc-800 rounded px-2 py-2"
           value={slot}
-          onChange={(e) => setSlot(parseInt(e.target.value, 10))}
+          onChange={(e) => setSlot(parseInt(e.target.value, 10) as Slot)}
         >
           <option value={1}>Preview 1</option>
           <option value={2}>Preview 2</option>
@@ -108,10 +118,7 @@ export default function BibleDisplay() {
         {error ? (
           <div className="text-rose-400">{error}</div>
         ) : previewHtml ? (
-          <div
-            className="text-zinc-50"
-            dangerouslySetInnerHTML={{ __html: previewHtml }}
-          />
+          <div className="text-zinc-50" dangerouslySetInnerHTML={{ __html: previewHtml }} />
         ) : (
           <div className="text-zinc-500">Click Preview to load the passage…</div>
         )}
