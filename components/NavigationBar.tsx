@@ -1,7 +1,6 @@
 'use client';
 
 import * as React from 'react';
-import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 type NavLink = { href: string; label: string };
@@ -19,19 +18,18 @@ export default function NavigationBar() {
   return (
     <nav className="flex flex-wrap items-center gap-2">
       {LINKS.map(({ href, label }) => {
-        // make sure href is a STRING
         const isActive = pathname === href || (href !== '/' && pathname.startsWith(href));
         return (
-          <Link
+          <a
             key={href}
-            href={href}
+            href={href} // PLAIN STRING
             className={[
               'px-3 py-1.5 rounded-md text-sm transition-colors',
               isActive ? 'bg-white/15 text-white' : 'text-zinc-200 hover:bg-white/10 hover:text-white',
             ].join(' ')}
           >
             {label}
-          </Link>
+          </a>
         );
       })}
     </nav>
