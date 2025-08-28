@@ -42,6 +42,25 @@ export default function BibleDisplay() {
   const r = await fetch(
     `/api/bible?q=${encodeURIComponent(q)}&ver=${encodeURIComponent(ver)}`
   );
+
+  const r = await fetch(
+  `/api/bible?q=${encodeURIComponent(q)}&ver=${encodeURIComponent(ver)}`
+);
+const data = (await r.json()) as { ref?: string; verses?: { v: number; t: string }[]; error?: string };
+if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
+
+const verses = Array.isArray(data?.verses) ? data.verses : [];
+setPreviewHtml(
+  (() => {
+    const body = verses
+      .map((v) => `<span class="opacity-60 mr-2">${v.v}</span>${v.t}`)
+      .join('<br/>');
+    return `
+      <div style="font-size:.95rem;opacity:.8;margin-bottom:.25rem">${data.ref || q}</div>
+      <div style="font-size:2.6rem;line-height:1.25">${body}</div>`;
+  })()
+);
+
   const data = (await r.json()) as ApiOk & ApiErr;
   if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
 
