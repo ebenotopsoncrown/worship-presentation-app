@@ -13,11 +13,7 @@ export default function AppHeader() {
 
         <div className="flex items-center gap-3">
           <span className="rounded-full bg-black/30 px-3 py-1 text-sm">Not signed in</span>
-          <button
-            type="button"
-            className="rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-1 text-sm"
-            onClick={() => {}}
-          >
+          <button type="button" className="rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-1 text-sm">
             Logout
           </button>
         </div>
