@@ -1,5 +1,13 @@
  'use client';
 
+import * as React from 'react';
+
+export default function NavigationBar() {
+  // Minimal safe stub. Replace later with the real UI.
+  return (
+    <div className="hidden" aria-hidden="true" />
+  );
+}
 type NavLink = { href: string; label: string };
 
 const LINKS: NavLink[] = [
