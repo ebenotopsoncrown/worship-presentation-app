@@ -37,20 +37,21 @@ export default function BibleDisplay() {
     }
 
     setBusy(true);
+    const r = await fetch(`/api/bible?q=${encodeURIComponent(q)}&ver=${encodeURIComponent(ver)}`);
     try {
-      const r = await fetch(
-        `/api/bible?q=${encodeURIComponent(q)}&ver=${encodeURIComponent(ver)}`
-      );
-      const data = (await r.json()) as ApiOk & ApiErr;
-      if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
+  const r = await fetch(
+    `/api/bible?q=${encodeURIComponent(q)}&ver=${encodeURIComponent(ver)}`
+  );
+  const data = (await r.json()) as ApiOk & ApiErr;
+  if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
 
-      const verses = Array.isArray(data?.verses) ? data.verses : [];
-      setPreviewHtml(toHtml(data.ref || q, verses));
-    } catch (e: any) {
-      setError(e?.message || 'Failed to load verses');
-    } finally {
-      setBusy(false);
-    }
+  const verses = Array.isArray(data?.verses) ? data.verses : [];
+  setPreviewHtml(toHtml(data.ref || q, verses));
+} catch (e: any) {
+  setError(e?.message || 'Failed to load verses');
+} finally {
+  setBusy(false);
+}
   };
 
   // Send the previewed HTML to the selected preview slot
