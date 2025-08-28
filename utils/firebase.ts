@@ -1,74 +1,118 @@
 // utils/firebase.ts
-// Single source of truth for Firebase + preview/live helpers.
-// Works in both client and Next.js pages/components.
+// Single source of truth for Firebase (App, Auth, RTDB, helpers)
 
-import { initializeApp, getApps, getApp } from 'firebase/app';
+import { initializeApp, getApps } from 'firebase/app';
 import {
   getDatabase,
-  ref as dbRef,
+  ref as rtdbRef,
   onValue,
-  set,
-  remove,
   get,
+  set,
+  update,
+  child,
+  type Database,
+  type Reference,
 } from 'firebase/database';
-import { getAuth } from 'firebase/auth';
+import {
+  getAuth,
+  onAuthStateChanged,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut as fbSignOut,
+} from 'firebase/auth';
 
-// ---- Config must be present in your Vercel env ----
-// NEXT_PUBLIC_FIREBASE_API_KEY
-// NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
-// NEXT_PUBLIC_FIREBASE_DB_URL
-// NEXT_PUBLIC_FIREBASE_PROJECT_ID
-// (optional) NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
-// (optional) NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
-// (optional) NEXT_PUBLIC_FIREBASE_APP_ID
-
-const cfg = {
+// ----- ENV CONFIG -----
+// Make sure ALL of these are defined on Vercel and locally (.env.local)
+const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
-  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DB_URL!, // IMPORTANT
+  // IMPORTANT: must be the regioned URL you saw in the console warning.
+  // Example: https://worship-presentation-default-rtdb.europe-west1.firebasedatabase.app
+  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL!,
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET!,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID!,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
 };
 
-const app = getApps().length ? getApp() : initializeApp(cfg);
-const db = getDatabase(app);
-const auth = getAuth(app);
+// Initialize once
+const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 
-export { app, db, auth, dbRef, onValue };
+// Core services
+export const db = getDatabase(app);
+export const auth = getAuth(app);
 
-// ---------- Preview / Live helpers ----------
+// Re-export RTDB helpers EXACTLY as your components expect
+// so calls like ref(db, 'hymns') keep working.
+export {
+  onValue,
+  get,
+  set,
+  update,
+  child,
+};
+
+// Re-export a `ref` function that proxies to the RTDB ref.
+// (Do NOT rename; components import { ref } directly from this module.)
+export function ref(dbOrRef: Database | Reference, path?: string): Reference {
+  // @ts-expect-error: pass-through to the overloaded SDK ref
+  return rtdbRef(dbOrRef, path);
+}
+
+// ----- Auth helpers -----
+export function onAuth(cb: Parameters<typeof onAuthStateChanged>[1]) {
+  return onAuthStateChanged(auth, cb);
+}
+
+export async function signInWithGoogle() {
+  const provider = new GoogleAuthProvider();
+  await signInWithPopup(auth, provider);
+}
+
+export async function signOut() {
+  await fbSignOut(auth);
+}
+
+// ----- Preview / Live helpers -----
+// Slots 1..4 (adjust if you later add more)
 export type Slot = 1 | 2 | 3 | 4;
-export type Payload =
-  | { type: 'text'; content: string }
-  | { type: 'html'; content: string }
-  | { type: 'image'; content: string }; // dataURL or public URL
 
-const previewPath = (slot: Slot) => `previews/slot${slot}`;
+export type PreviewPayload =
+  | { type: 'text';  content: string; meta?: any }
+  | { type: 'html';  content: string; meta?: any }
+  | { type: 'image'; content: string; meta?: any } // dataURL or public URL
+  | { type: 'slides'; slides: string[]; index?: number; meta?: any };
 
-export async function setPreviewSlot(slot: Slot, payload: Payload) {
-  await set(dbRef(db, previewPath(slot)), { ...payload, ts: Date.now() });
+function slotPath(slot: Slot) {
+  return `previews/${slot}`;
 }
 
+/** Write to a preview slot */
+export async function setPreviewSlot(slot: Slot, payload: PreviewPayload) {
+  await set(rtdbRef(db, slotPath(slot)), {
+    ...payload,
+    updatedAt: Date.now(),
+  });
+}
+
+/** Subscribe to a preview slot; returns unsubscribe */
+export function listenPreviewSlot(
+  slot: Slot,
+  cb: (value: any | null) => void
+) {
+  const r = rtdbRef(db, slotPath(slot));
+  const unsub = onValue(r, (snap) => cb(snap.val() ?? null));
+  return unsub; // call to stop listening
+}
+
+/** Clear a preview slot */
 export async function clearPreviewSlot(slot: Slot) {
-  await remove(dbRef(db, previewPath(slot)));
+  await set(rtdbRef(db, slotPath(slot)), null);
 }
 
-export function listenPreviewSlot(slot: Slot, cb: (v: any) => void) {
-  return onValue(dbRef(db, previewPath(slot)), (snap) => cb(snap.val()));
-}
-
-export async function copyPreviewToLive(slot: Slot) {
-  const snap = await get(dbRef(db, previewPath(slot)));
-  const val = snap.val();
-  await set(dbRef(db, 'live'), val ? { ...val, from: slot, ts: Date.now() } : null);
-}
-
-export function listenLive(cb: (v: any) => void) {
-  return onValue(dbRef(db, 'live'), (snap) => cb(snap.val()));
-}
-
-export async function clearLive() {
-  await remove(dbRef(db, 'live'));
+/** Copy a preview slot to /live/current (used by “Go Live”) */
+export async function goLiveFromSlot(slot: Slot) {
+  const src = await get(rtdbRef(db, slotPath(slot)));
+  const val = src.val();
+  await set(rtdbRef(db, 'live/current'), val ?? null);
 }
