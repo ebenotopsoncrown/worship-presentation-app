@@ -1,85 +1,72 @@
 // utils/firebase.ts
-import { initializeApp, getApps } from 'firebase/app';
+'use client';
+
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
 import {
   getDatabase,
-  ref as dbRef,
+  ref as rtdbRef,
   onValue,
   set,
   get,
   remove,
+  DatabaseReference,
 } from 'firebase/database';
 
-/** IMPORTANT: make sure this URL matches your regional RTDB URL, e.g.
- * https://worship-presentation-default-rtdb.europe-west1.firebasedatabase.app
- */
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
-  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DB_URL!, // <- must be set
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
-};
+/** ---- App + Services (safe for client-only use) ---- */
+const app =
+  getApps().length > 0
+    ? getApp()
+    : initializeApp({
+        apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
+        authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
+        databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DB_URL!, // REQUIRED: the regioned RTDB URL
+        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
+        storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET!,
+        messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID!,
+        appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
+      });
 
-const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
-export const db = getDatabase(app);
-export { dbRef, onValue };
+export const auth = getAuth(app);
 
+// Always bind the DB to the regioned URL to avoid the “Database lives in a different region” warning.
+export const db = getDatabase(app, process.env.NEXT_PUBLIC_FIREBASE_DB_URL);
+
+/** Small alias so existing code can keep importing `ref` */
+export const ref = (path: string): DatabaseReference => rtdbRef(db, path);
+
+/** ---- Types and helpers used by the app ---- */
 export type Slot = 1 | 2 | 3 | 4;
 
 export type PreviewPayload =
-  | { type: 'html'; content: string; meta?: Record<string, any> }
-  | { type: 'text'; content: string; meta?: Record<string, any> }
-  | { type: 'image'; content: string; meta?: Record<string, any> } // URL or data URL
-  | { type: 'slides'; slides: string[]; index: number; meta?: Record<string, any> };
-
-function slotPath(slot: Slot) {
-  return `previews/${slot}`;
-}
-
-/** Write a preview slot */
-export async function setPreviewSlot(slot: Slot, payload: PreviewPayload) {
-  await set(dbRef(db, slotPath(slot)), { ...payload, _ts: Date.now() });
-}
+  | { type: 'text'; content: string }
+  | { type: 'html'; content: string }
+  | { type: 'image'; content: string }                     // data URL or absolute URL
+  | { kind: 'slides'; slides: string[]; index: number };   // slide HTML pages
 
 /** Listen to a preview slot */
-export function listenPreviewSlot(
-  slot: Slot,
-  cb: (v: PreviewPayload | null) => void
-) {
-  return onValue(dbRef(db, slotPath(slot)), s =>
-    cb((s.val() as PreviewPayload) ?? null)
-  );
-}
+export const listenPreviewSlot = (slot: Slot, cb: (val: any) => void) => {
+  return onValue(ref(`previews/${slot}`), (snap) => cb(snap.val()));
+};
 
-/** Clear a preview slot */
-export async function clearPreviewSlot(slot: Slot) {
-  await remove(dbRef(db, slotPath(slot)));
-}
+/** Set/clear a preview slot */
+export const setPreviewSlot = async (slot: Slot, payload: PreviewPayload) => {
+  await set(ref(`previews/${slot}`), { ...payload, ts: Date.now() });
+};
 
-/** Listen to "live" */
-export function listenLive(cb: (v: PreviewPayload | null) => void) {
-  return onValue(dbRef(db, 'live'), s =>
-    cb((s.val() as PreviewPayload) ?? null)
-  );
-}
+export const clearPreviewSlot = async (slot: Slot) => {
+  await remove(ref(`previews/${slot}`));
+};
 
-/** Set "live" directly */
-export async function setLive(payload: PreviewPayload) {
-  await set(dbRef(db, 'live'), { ...payload, _ts: Date.now() });
-}
+/** Copy a preview slot to the live channel */
+export const copyPreviewToLive = async (slot: Slot) => {
+  const src = ref(`previews/${slot}`);
+  const dst = ref('live');
+  const snap = await get(src);
+  await set(dst, snap.val() ?? null);
+};
 
-/** Copy a preview slot to "live" */
-export async function goLiveFromSlot(slot: Slot) {
-  const snap = await get(dbRef(db, slotPath(slot)));
-  const val = snap.val();
-  if (val) {
-    await set(dbRef(db, 'live'), { ...val, _ts: Date.now() });
-  } else {
-    await remove(dbRef(db, 'live'));
-  }
-}
-
-/** Backwards alias if any code imports `goLive` */
-export const goLive = goLiveFromSlot;
+/** Listen to the live channel (used by /live) */
+export const listenLive = (cb: (val: any) => void) => {
+  return onValue(ref('live'), (snap) => cb(snap.val()));
+};
