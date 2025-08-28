@@ -1,36 +1,41 @@
-// pages/live.tsx  (Next.js pages router)
-// If you are on the app router, put the same code in app/live/page.tsx
-"use client";
+// pages/live.tsx
+'use client';
 
-import React, { useEffect, useState } from "react";
-import { subscribeToLive } from "../utils/firebase";
-
-function toHtml(val: any): string {
-  if (!val) return "";
-  if (typeof val === "string") return val;
-  if (val.html) return String(val.html);
-  if (val.data?.html) return String(val.data.html);
-  return String(val);
-}
+import React from 'react';
+import { listenLive } from '../utils/firebase';
 
 export default function Live() {
-  const [html, setHtml] = useState("");
+  const [live, setLive] = React.useState<any>(null);
 
-  useEffect(() => {
-    const off = subscribeToLive((val) => setHtml(toHtml(val)));
-    // subscribeToLive returns the Firebase unsubscribe; clean up when leaving
-    return () => {
-      if (typeof off === "function") (off as any)();
-    };
+  React.useEffect(() => {
+    const off = listenLive(setLive);
+    return () => off();
   }, []);
 
   return (
-    <div className="min-h-screen bg-black text-white">
-      <div className="mx-auto max-w-[96vw] py-6">
-        <div
-          className="w-full aspect-video rounded-xl bg-zinc-900 ring-1 ring-zinc-800 p-6"
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
+    <div className="min-h-screen bg-[#0b0b0f] text-white p-4">
+      <div className="mx-auto max-w-7xl">
+        <div className="rounded-2xl border border-white/10 bg-black/40 p-4 min-h-[70vh] flex items-center justify-center">
+          {!live ? (
+            <div className="text-zinc-400">Nothing live</div>
+          ) : live.type === 'image' ? (
+            // image sized to fit
+            <img
+              src={live.content}
+              alt="Live"
+              className="max-w-full max-h-[70vh] object-contain"
+            />
+          ) : live.type === 'html' ? (
+            <div
+              className="w-full max-w-5xl mx-auto text-4xl leading-relaxed"
+              dangerouslySetInnerHTML={{ __html: live.content }}
+            />
+          ) : (
+            <div className="w-full max-w-5xl mx-auto text-5xl font-semibold">
+              {live.content}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
