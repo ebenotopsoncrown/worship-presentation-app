@@ -74,7 +74,7 @@ export default function Home() {
       </header>
 
       <main className="mx-auto max-w-7xl p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <Panel title="Preview 1 (Queued)" slot={1} />
+        <div className="panel-header">Preview 1 (Queued)</div>
         <Panel title="Preview 2" slot={2} />
         {/* Live is a separate route; this column can be left for tools or omit */}
         <div className="rounded-2xl border border-white/10 bg-[#141418]">
