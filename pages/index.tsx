@@ -1,6 +1,10 @@
 // pages/index.tsx
 'use client';
 
+import AppHeader from '../components/AppHeader';
+import HymnDisplay from '../components/HymnDisplay';
+import BibleDisplay from '../components/BibleDisplay';
+import SlidesMini from '../components/SlidesMini';
 import React from 'react';
 import { copyPreviewToLive, listenPreviewSlot, clearPreviewSlot, Slot } from '../utils/firebase';
 
