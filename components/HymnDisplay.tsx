@@ -1,6 +1,8 @@
 'use client';
+
 import React from 'react';
-import { db, ref, onValue, setPreviewSlot } from '../utils/firebase';
+import { db, ref, onValue } from '../utils/firebase';
+import { setPreviewSlot, type Slot } from '../utils/firebase';
 
 type Hymn = {
   id: string;
@@ -17,21 +19,23 @@ function hymnToSlides(h: Hymn) {
     `<div style="font-size:2.6rem;line-height:1.2">${html}</div>`;
 
   const slides: string[] = [];
-  const verses: string[][] =
-    Array.isArray(h.verses?.[0]) ? (h.verses as string[][])
-                                 : (h.verses as string[]).map((v) => [v]);
+  const verses: string[][] = Array.isArray((h.verses as any)?.[0])
+    ? (h.verses as string[][])
+    : (h.verses as string[]).map((v) => [v]);
 
   verses.forEach((lines, i) => {
     const head = `<div style="font-size:1rem;opacity:.7;margin-bottom:.25rem">
       Hymn ${h.number ?? ''} — Verse ${i + 1}${h.title ? ` — ${h.title}` : ''}</div>`;
     const body = lines.map((l) => l.trim()).filter(Boolean).join('<br/>');
     slides.push(mk(head + body));
+
     if (h.chorus && h.chorus.length) {
       slides.push(
         mk(
-          `<div style="font-size:1rem;opacity:.7;margin-bottom:.25rem">Chorus</div>${h.chorus.join(
-            '<br/>'
-          )}`
+          `<div style="font-size:1rem;opacity:.7;margin-bottom:.25rem">Chorus</div>${h.chorus
+            .map((c) => c.trim())
+            .filter(Boolean)
+            .join('<br/>')}`
         )
       );
     }
@@ -57,7 +61,7 @@ function fuseScore(h: Hymn, q: string) {
 export default function HymnDisplay() {
   const [all, setAll] = React.useState<Hymn[]>([]);
   const [q, setQ] = React.useState('');
-  const [slot, setSlot] = React.useState<number>(1);
+  const [slot, setSlot] = React.useState<Slot>(1);
   const [selected, setSelected] = React.useState<Hymn | null>(null);
 
   React.useEffect(() => {
@@ -83,20 +87,11 @@ export default function HymnDisplay() {
   const send = async () => {
     if (!selected) return;
     const slides = hymnToSlides(selected);
-    if (slot === 1) {
-      await setPreviewSlot(1, {
-        kind: 'slides',
-        slides,
-        index: 0,
-        meta: { type: 'hymn', number: selected.number, title: selected.title },
-      });
-    } else {
-      const whole = slides.join('<!-- slide -->');
-      await setPreviewSlot(slot, {
-        html: whole,
-        meta: { type: 'hymn', number: selected.number, title: selected.title },
-      });
-    }
+    const html = slides[0] || ''; // first slide for now (stable with setPreviewSlot)
+    await setPreviewSlot(slot, {
+      type: 'html',
+      content: html,
+    });
   };
 
   return (
@@ -113,7 +108,7 @@ export default function HymnDisplay() {
         <select
           className="bg-zinc-800 rounded px-2 py-2"
           value={slot}
-          onChange={(e) => setSlot(parseInt(e.target.value, 10))}
+          onChange={(e) => setSlot(parseInt(e.target.value, 10) as Slot)}
         >
           <option value={1}>Preview 1</option>
           <option value={2}>Preview 2</option>
@@ -146,7 +141,8 @@ export default function HymnDisplay() {
                     }`}
                   >
                     <div className="text-zinc-200">
-                      {h.number ? `${h.number}. ` : ''}{h.title || h.firstLine}
+                      {h.number ? `${h.number}. ` : ''}
+                      {h.title || h.firstLine}
                     </div>
                     {h.firstLine && (
                       <div className="text-xs text-zinc-400">{h.firstLine}</div>
