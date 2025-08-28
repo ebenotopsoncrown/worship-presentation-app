@@ -1,349 +1,249 @@
 'use client';
 
-import React, { useMemo, useRef, useState } from 'react';
-import { setPreviewSlot, uploadSlideImage } from '../utils/firebase';
+import React from 'react';
+import { setPreviewSlot, type Slot } from '../utils/firebase';
 
-type Slot = 1 | 2 | 3 | 4;
-
-const FONTS = [
-  'Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif',
-  'Arial, Helvetica, sans-serif',
-  'Helvetica, Arial, sans-serif',
-  '"Times New Roman", Times, serif',
-  'Georgia, serif',
-  'Garamond, serif',
-  '"Trebuchet MS", sans-serif',
-  'Verdana, Geneva, sans-serif',
-  'Tahoma, Geneva, sans-serif',
-  '"Courier New", Courier, monospace',
-];
-const FONT_LABEL = (f: string) => f.split(',')[0].replace(/"/g, '');
-const FONT_SIZES = [24, 32, 40, 48, 56, 64, 72];
+type Align = 'left' | 'center' | 'right';
 
 export default function SlidesMini() {
-  const editorRef = useRef<HTMLDivElement>(null);
-  const [busy, setBusy] = useState(false);
+  const [slot, setSlot] = React.useState<Slot>(2);
+  const [imgDataUrl, setImgDataUrl] = React.useState<string | null>(null);
 
-  // slide meta
-  const [title, setTitle] = useState('Welcome');
-  const [slot, setSlot] = useState<Slot>(2);
+  // basic text editor controls (kept minimal as requested)
+  const [text, setText] = React.useState('Welcome to church!');
+  const [font, setFont] = React.useState('Inter');
+  const [size, setSize] = React.useState(64);
+  const [bold, setBold] = React.useState(true);
+  const [italic, setItalic] = React.useState(false);
+  const [align, setAlign] = React.useState<Align>('center');
+  const [color, setColor] = React.useState('#ffffff');
 
-  // text toolbar
-  const [font, setFont] = useState(FONTS[0]);
-  const [fontSize, setFontSize] = useState<number>(48);
-  const [fontColor, setFontColor] = useState('#ffffff');
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
-  // background
-  const [bgColor, setBgColor] = useState('#0b0f1a');
-  const [bgImage, setBgImage] = useState<string | null>(null);
+  const onPickFile = () => fileInputRef.current?.click();
 
-  // exec helpers
-  const exec = (cmd: string, value: string | null = null) =>
-    document.execCommand(cmd, false, value ?? undefined);
-
-  const applyFontFamily = (value: string) => {
-    setFont(value);
-    exec('fontName', value);
-  };
-
-  const applyFontSize = (px: number) => {
-    setFontSize(px);
-    exec('fontSize', '7');
-    const root = editorRef.current!;
-    root.querySelectorAll('font[size]').forEach((f) => {
-      const span = document.createElement('span');
-      span.style.fontSize = `${px}px`;
-      span.innerHTML = (f as HTMLElement).innerHTML;
-      f.replaceWith(span);
-    });
-  };
-
-  const applyColor = (color: string) => {
-    setFontColor(color);
-    exec('foreColor', color);
-  };
-
-  const insertHR = () => exec('insertHorizontalRule');
-
-  const ensureDefault = () => {
-    const root = editorRef.current!;
-    if (!root.innerHTML.trim()) {
-      root.innerHTML =
-        '<div style="font-size:48px; line-height:1.15; font-weight:700;">Welcome to church!</div>';
-    }
-  };
-
-  // ---- image / slide insertion (PNG/JPG/WEBP etc.) -----------
-  const addImgElement = (src: string) => {
-    editorRef.current?.focus();
-    const img = document.createElement('img');
-    img.src = src;
-    img.style.maxWidth = '100%';
-    img.style.maxHeight = '100%';
-    img.style.height = 'auto';
-    img.style.objectFit = 'contain';
-    img.style.margin = '18px auto';
-    img.style.display = 'block';
-
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0) {
-      const range = sel.getRangeAt(0);
-      range.insertNode(img);
-      range.setStartAfter(img);
-      range.setEndAfter(img);
-      sel.removeAllRanges();
-      sel.addRange(range);
-    } else {
-      editorRef.current?.appendChild(img);
-    }
-    return img;
-  };
-
-  const handleFiles = async (files: FileList) => {
-    const imageFiles: File[] = [];
-    const unsupported: File[] = [];
-
-    Array.from(files).forEach((f) => {
-      const lower = f.name.toLowerCase();
-      if (/\.(png|jpe?g|gif|webp|svg)$/.test(lower)) imageFiles.push(f);
-      else if (/\.(pptx?|pdf)$/.test(lower)) unsupported.push(f);
-    });
-
-    if (unsupported.length) {
-      alert(
-        'PPT/PPTX/PDF import is not supported directly in the browser.\n' +
-          'Please export your slides as images (PNG/JPG) and upload those.\n\n' +
-          `Ignored: ${unsupported.map((f) => f.name).join(', ')}`
-      );
-    }
-
-    for (const f of imageFiles) {
-      // show immediately
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = reject;
-        reader.readAsDataURL(f);
-      });
-
-      const imgEl = addImgElement(dataUrl);
-
-      // upload in the background (if Storage configured)
-      try {
-        const cdnUrl = await uploadSlideImage(f);
-        if (cdnUrl) imgEl.src = cdnUrl;
-      } catch (err) {
-        console.error('Slide image upload failed — keeping local preview', err);
-      }
-    }
-  };
-
-  const onInsertImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    try {
-      if (e.target.files?.length) await handleFiles(e.target.files);
-    } finally {
-      e.target.value = '';
-    }
-  };
-
-  const onBackgroundImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onFileChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
+
+    // Images supported directly. For PPT/PPTX you’ll need a separate server step.
+    const isImage = /^image\//.test(f.type);
+    if (!isImage) {
+      alert('Only images are supported here (PNG/JPG/WebP). For PowerPoint, export slides as images first.');
+      e.currentTarget.value = '';
+      return;
+    }
+
     const reader = new FileReader();
-    reader.onload = () => setBgImage(reader.result as string);
+    reader.onload = () => {
+      setImgDataUrl(String(reader.result || ''));
+    };
     reader.readAsDataURL(f);
   };
-  const clearBackground = () => setBgImage(null);
 
-  // ---- send to preview ---------------------------------------
-  const htmlToSend = useMemo(() => {
-    const inner = editorRef.current?.innerHTML ?? '';
-    const style = [
-      `min-height:320px`,
-      `height:100%`,
-      `padding:24px`,
-      `color:#e5e7eb`,
-      `text-align:center`,
-      `background:${bgColor}`,
-      bgImage ? `background-image:url(${bgImage})` : '',
-      `background-size:cover`,
-      `background-position:center`,
-      `border-radius:12px`,
-    ]
-      .filter(Boolean)
-      .join(';');
+  const buildTextHtml = () => {
+    const fw = bold ? 700 : 400;
+    const fs = italic ? 'italic' : 'normal';
+    const ta =
+      align === 'center' ? 'center' : align === 'right' ? 'right' : 'left';
 
-    return `<div style="${style}; font-family:${font}">${inner}</div>`;
-  }, [bgColor, bgImage, font]);
+    // container is full-size so it can overlay on image if present
+    return `
+<div style="
+  width:100%;
+  height:100%;
+  display:flex;
+  align-items:center;
+  justify-content:${align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center'};
+  text-align:${ta};
+">
+  <div style="
+    font-family:${font}, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    font-weight:${fw};
+    font-style:${fs};
+    font-size:${size}px;
+    color:${color};
+    line-height:1.1;
+    padding:1rem;
+    width:100%;
+  ">
+    ${escapeHtml(text).replace(/\n/g, '<br/>')}
+  </div>
+</div>`;
+  };
 
-  const sendToPreview = async () => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      await setPreviewSlot(slot, {
-        id: `slides-${Date.now()}`,
-        kind: 'slides',
-        title: title ?? '',
-        html: htmlToSend,
-      });
-    } finally {
-      setBusy(false);
+  const send = async () => {
+    if (imgDataUrl) {
+      await setPreviewSlot(slot, { type: 'image', content: imgDataUrl });
+      return;
+    }
+    if (text.trim()) {
+      await setPreviewSlot(slot, { type: 'html', content: buildTextHtml() });
     }
   };
 
   return (
-    <div className="panel panel--slides h-[640px] flex flex-col">
+    <div className="panel panel--slides h-[520px] flex flex-col">
       <div className="panel-header">Slides</div>
 
-      {/* Top row */}
-      <div className="flex flex-wrap items-center gap-2 mb-3">
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
         <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className="input input--dark w-[260px]"
-          placeholder="Slide title"
+          className="w-full bg-zinc-800 rounded px-3 py-2 outline-none"
+          placeholder="Type text to overlay (or leave empty if you only want an image)…"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
         />
 
-        <label className="btn btn-ghost cursor-pointer">
+        <button
+          onClick={onPickFile}
+          className="px-3 py-2 rounded bg-zinc-700 hover:bg-zinc-600 text-white"
+        >
           Insert image/slide
-          <input
-            type="file"
-            className="hidden"
-            multiple
-            accept="image/*,.ppt,.pptx,.pdf"
-            onChange={onInsertImage}
-          />
-        </label>
-
-        <button className="btn btn-green" onClick={sendToPreview} disabled={busy}>
-          {busy ? 'Sending…' : 'Send to Preview'}
         </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          className="hidden"
+          onChange={onFileChange}
+        />
 
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-sm text-zinc-400">Send to</span>
-          <select
-            value={slot}
-            onChange={(e) => setSlot(Number(e.target.value) as Slot)}
-            className="select select--dark"
-          >
-            <option value={1}>Preview 1</option>
-            <option value={2}>Preview 2</option>
-            <option value={3}>Preview 3</option>
-            <option value={4}>Preview 4</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Toolbar */}
-      <div className="bg-zinc-900/60 rounded-xl border border-zinc-800 p-2 mb-2 flex flex-wrap items-center gap-2">
         <select
+          className="bg-zinc-800 rounded px-2 py-2"
           value={font}
-          onChange={(e) => applyFontFamily(e.target.value)}
-          className="select select--dark"
-          title="Font family"
+          onChange={(e) => setFont(e.target.value)}
+          title="Font"
         >
-          {FONTS.map((f) => (
-            <option key={f} value={f} style={{ fontFamily: f }}>
-              {FONT_LABEL(f)}
-            </option>
-          ))}
+          <option value="Inter">Inter</option>
+          <option value="Segoe UI">Segoe UI</option>
+          <option value="Roboto">Roboto</option>
+          <option value="Helvetica">Helvetica</option>
+          <option value="Arial">Arial</option>
         </select>
 
         <select
-          value={fontSize}
-          onChange={(e) => applyFontSize(Number(e.target.value))}
-          className="select select--dark"
-          title="Font size"
+          className="bg-zinc-800 rounded px-2 py-2"
+          value={size}
+          onChange={(e) => setSize(parseInt(e.target.value, 10))}
+          title="Size"
         >
-          {FONT_SIZES.map((s) => (
-            <option key={s} value={s}>
-              {s}px
+          {[32, 40, 48, 56, 64, 72, 96, 128].map((n) => (
+            <option key={n} value={n}>
+              {n}px
             </option>
           ))}
         </select>
 
-        <label className="inline-flex items-center gap-2 px-2 py-1 rounded bg-zinc-800">
-          <span className="text-xs text-zinc-300">Text</span>
-          <input
-            type="color"
-            value={fontColor}
-            onChange={(e) => applyColor(e.target.value)}
-            className="h-6 w-8 bg-transparent"
-          />
-        </label>
-
-        <div className="h-6 w-px bg-zinc-700 mx-1" />
-
-        <button className="btn btn-ghost" onClick={() => exec('bold')} title="Bold">
-          <span className="font-bold">B</span>
+        <button
+          onClick={() => setBold((v) => !v)}
+          className={`px-2 py-2 rounded ${
+            bold ? 'bg-zinc-600' : 'bg-zinc-800'
+          }`}
+          title="Bold"
+        >
+          B
         </button>
-        <button className="btn btn-ghost" onClick={() => exec('italic')} title="Italic">
-          <span className="italic">I</span>
-        </button>
-        <button className="btn btn-ghost" onClick={() => exec('underline')} title="Underline">
-          <span className="underline">U</span>
+        <button
+          onClick={() => setItalic((v) => !v)}
+          className={`px-2 py-2 rounded ${
+            italic ? 'bg-zinc-600' : 'bg-zinc-800'
+          }`}
+          title="Italic"
+        >
+          I
         </button>
 
-        <div className="h-6 w-px bg-zinc-700 mx-1" />
-
-        <button className="btn btn-ghost" onClick={() => exec('justifyLeft')} title="Align left">
+        <button
+          onClick={() => setAlign('left')}
+          className={`px-2 py-2 rounded ${
+            align === 'left' ? 'bg-zinc-600' : 'bg-zinc-800'
+          }`}
+          title="Align left"
+        >
           L
         </button>
-        <button className="btn btn-ghost" onClick={() => exec('justifyCenter')} title="Align center">
+        <button
+          onClick={() => setAlign('center')}
+          className={`px-2 py-2 rounded ${
+            align === 'center' ? 'bg-zinc-600' : 'bg-zinc-800'
+          }`}
+          title="Align center"
+        >
           C
         </button>
-        <button className="btn btn-ghost" onClick={() => exec('justifyRight')} title="Align right">
+        <button
+          onClick={() => setAlign('right')}
+          className={`px-2 py-2 rounded ${
+            align === 'right' ? 'bg-zinc-600' : 'bg-zinc-800'
+          }`}
+          title="Align right"
+        >
           R
         </button>
 
-        <div className="h-6 w-px bg-zinc-700 mx-1" />
+        <input
+          type="color"
+          value={color}
+          onChange={(e) => setColor(e.target.value)}
+          className="bg-zinc-800 rounded px-2 py-2"
+          title="Text color"
+        />
 
-        <button className="btn btn-ghost" onClick={insertHR} title="Insert line">
-          ———
+        <select
+          className="bg-zinc-800 rounded px-2 py-2 ml-auto"
+          value={slot}
+          onChange={(e) => setSlot(parseInt(e.target.value, 10) as Slot)}
+          title="Send to"
+        >
+          <option value={1}>Preview 1</option>
+          <option value={2}>Preview 2</option>
+          <option value={3}>Preview 3</option>
+          <option value={4}>Preview 4</option>
+        </select>
+
+        <button
+          onClick={send}
+          className="px-3 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white"
+        >
+          Send to Preview
         </button>
-
-        <div className="h-6 w-px bg-zinc-700 mx-1" />
-        <label className="inline-flex items-center gap-2 px-2 py-1 rounded bg-zinc-900/60 border border-zinc-800">
-          <span className="text-xs text-zinc-300">Background</span>
-          <input
-            type="color"
-            value={bgColor}
-            onChange={(e) => setBgColor(e.target.value)}
-            className="h-6 w-8 bg-transparent"
-          />
-        </label>
-        <label className="btn btn-ghost cursor-pointer">
-          Background image
-          <input type="file" accept="image/*" className="hidden" onChange={onBackgroundImage} />
-        </label>
-        {bgImage && (
-          <button className="btn btn-ghost" onClick={clearBackground}>
-            Clear background
-          </button>
-        )}
       </div>
 
-      {/* Workspace */}
-      <div className="flex-1 min-h-0">
-        <div
-          className="bg-zinc-950 rounded-xl border border-zinc-800 shadow-inner overflow-auto h-full"
-          style={{
-            backgroundColor: bgColor,
-            backgroundImage: bgImage ? `url(${bgImage})` : undefined,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }}
-        >
-          <div
-            ref={editorRef}
-            className="min-h-[320px] h-full p-6 text-center text-zinc-50"
-            style={{ fontFamily: font }}
-            contentEditable
-            suppressContentEditableWarning
-            onFocus={ensureDefault}
+      {/* preview area (equal height) */}
+      <div className="bg-black/40 rounded-xl flex-1 min-h-0 overflow-hidden relative">
+        {/* image */}
+        {imgDataUrl && (
+          <img
+            src={imgDataUrl}
+            alt=""
+            className="absolute inset-0 w-full h-full object-contain"
           />
-        </div>
+        )}
+
+        {/* text overlay */}
+        {text.trim() && (
+          <div
+            className="absolute inset-0"
+            dangerouslySetInnerHTML={{ __html: buildTextHtml() }}
+          />
+        )}
+
+        {!imgDataUrl && !text.trim() && (
+          <div className="w-full h-full flex items-center justify-center text-zinc-500">
+            No content yet — pick an image or type text above.
+          </div>
+        )}
       </div>
     </div>
   );
+}
+
+/** Utils */
+function escapeHtml(s: string) {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
