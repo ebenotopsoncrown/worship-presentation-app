@@ -64,6 +64,7 @@ function Panel({
 
 export default function Home() {
   return (
+   <AppHeader />
     <div className="min-h-screen bg-[#0b0b0f] text-white">
       {/* Header */}
       <header className="sticky top-0 z-10 border-b border-white/10 bg-gradient-to-r from-fuchsia-600 via-violet-600 to-indigo-600">
