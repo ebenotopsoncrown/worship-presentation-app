@@ -7,12 +7,11 @@ type Verse = { v: number; t: string };
 type ApiOk = { ref: string; verses: Verse[] };
 type ApiErr = { error?: string };
 
-/** utils */
+/** Build nice HTML for the bible passage */
 const toHtml = (ref: string, verses: Verse[]) => {
   const body = verses
     .map((v) => `<span class="opacity-60 mr-2">${v.v}</span>${v.t}`)
     .join('<br/>');
-
   return `
     <div style="font-size:.95rem;opacity:.8;margin-bottom:.25rem">${ref}</div>
     <div style="font-size:2.6rem;line-height:1.25">${body}</div>`;
@@ -26,6 +25,7 @@ export default function BibleDisplay() {
   const [error, setError] = React.useState<string | null>(null);
   const [previewHtml, setPreviewHtml] = React.useState<string>('');
 
+  /** Load verses and render preview HTML */
   const preview = async () => {
     setError(null);
     setPreviewHtml('');
@@ -37,49 +37,32 @@ export default function BibleDisplay() {
     }
 
     setBusy(true);
-    const r = await fetch(`/api/bible?q=${encodeURIComponent(q)}&ver=${encodeURIComponent(ver)}`);
     try {
-  const r = await fetch(
-    `/api/bible?q=${encodeURIComponent(q)}&ver=${encodeURIComponent(ver)}`
-  );
+      const r = await fetch(
+        `/api/bible?q=${encodeURIComponent(q)}&ver=${encodeURIComponent(ver)}`
+      );
 
-  const r = await fetch(
-  `/api/bible?q=${encodeURIComponent(q)}&ver=${encodeURIComponent(ver)}`
-);
-const data = (await r.json()) as { ref?: string; verses?: { v: number; t: string }[]; error?: string };
-if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
+      const data = (await r.json()) as ApiOk & ApiErr;
+      if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
 
-const verses = Array.isArray(data?.verses) ? data.verses : [];
-setPreviewHtml(
-  (() => {
-    const body = verses
-      .map((v) => `<span class="opacity-60 mr-2">${v.v}</span>${v.t}`)
-      .join('<br/>');
-    return `
-      <div style="font-size:.95rem;opacity:.8;margin-bottom:.25rem">${data.ref || q}</div>
-      <div style="font-size:2.6rem;line-height:1.25">${body}</div>`;
-  })()
-);
-
-  const data = (await r.json()) as ApiOk & ApiErr;
-  if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
-
-  const verses = Array.isArray(data?.verses) ? data.verses : [];
-  setPreviewHtml(toHtml(data.ref || q, verses));
-} catch (e: any) {
-  setError(e?.message || 'Failed to load verses');
-} finally {
-  setBusy(false);
-}
+      // Use a different name to avoid any shadowing / redefinition
+      const verseList = Array.isArray(data?.verses) ? data.verses : [];
+      setPreviewHtml(toHtml(data.ref || q, verseList));
+    } catch (e: any) {
+      setError(e?.message || 'Failed to load verses');
+    } finally {
+      setBusy(false);
+    }
   };
 
-  // Send the previewed HTML to the selected preview slot
+  /** Push the preview HTML to the selected preview slot */
   const send = async () => {
     if (!previewHtml) return;
-    await setPreviewSlot(slot, {
-      type: 'html',
-      content: previewHtml,
-    });
+    try {
+      await setPreviewSlot(slot, { type: 'html', content: previewHtml });
+    } catch (e) {
+      console.error('Failed to send to preview:', e);
+    }
   };
 
   return (
@@ -98,11 +81,12 @@ setPreviewHtml(
           className="bg-zinc-800 rounded px-2 py-2"
           value={ver}
           onChange={(e) => setVer(e.target.value)}
+          title="Version"
         >
-          <option>KJV</option>
-          <option>NIV</option>
-          <option>ESV</option>
-          <option>NKJV</option>
+          <option value="KJV">KJV</option>
+          <option value="NIV">NIV</option>
+          <option value="ESV">ESV</option>
+          <option value="NKJV">NKJV</option>
         </select>
 
         <button
@@ -110,13 +94,14 @@ setPreviewHtml(
           disabled={busy}
           className="px-3 py-2 rounded bg-zinc-700 hover:bg-zinc-600 text-white disabled:opacity-50"
         >
-          Preview
+          {busy ? 'Loading…' : 'Preview'}
         </button>
 
         <select
           className="bg-zinc-800 rounded px-2 py-2"
           value={slot}
           onChange={(e) => setSlot(parseInt(e.target.value, 10) as Slot)}
+          title="Preview slot"
         >
           <option value={1}>Preview 1</option>
           <option value={2}>Preview 2</option>
@@ -133,7 +118,7 @@ setPreviewHtml(
         </button>
       </div>
 
-      {/* equal-height content area */}
+      {/* preview area */}
       <div className="bg-black/40 rounded-xl flex-1 min-h-0 overflow-auto p-4">
         {error ? (
           <div className="text-rose-400">{error}</div>
