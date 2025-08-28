@@ -3,15 +3,8 @@
 import React from 'react';
 import { listenLive } from '../utils/firebase';
 
-type Payload =
-  | { type: 'html'; content: string }
-  | { type: 'text'; content: string }
-  | { type: 'image'; content: string }
-  | { type: 'slides'; slides: string[]; index: number }
-  | null;
-
-export default function LivePage() {
-  const [data, setData] = React.useState<Payload>(null);
+export default function Live() {
+  const [data, setData] = React.useState<any>(null);
 
   React.useEffect(() => {
     const off = listenLive(setData);
@@ -19,57 +12,31 @@ export default function LivePage() {
   }, []);
 
   let body: React.ReactNode = (
-    <div className="text-zinc-500">Nothing live</div>
+    <div className="text-zinc-400">Nothing live</div>
   );
 
   if (data) {
-    switch (data.type) {
-      case 'text':
-        body = (
-          <div className="text-white text-7xl font-semibold text-center">
-            {data.content}
-          </div>
-        );
-        break;
-      case 'html':
-        body = (
-          <div
-            className="text-white text-center"
-            dangerouslySetInnerHTML={{ __html: data.content }}
-          />
-        );
-        break;
-      case 'image':
-        body = (
-          <img
-            src={data.content}
-            className="max-w-full max-h-full object-contain"
-            alt=""
-          />
-        );
-        break;
-      case 'slides':
-        body = (
-          <div
-            className="text-white text-center"
-            dangerouslySetInnerHTML={{
-              __html: data.slides?.[data.index ?? 0] || '',
-            }}
-          />
-        );
-        break;
-      default:
-        body = (
-          <pre className="text-xs opacity-75">
-            {JSON.stringify(data, null, 2)}
-          </pre>
-        );
+    if (data.kind === 'slides') {
+      const html = (data.slides?.[data.index!] as string) || '';
+      body = <div dangerouslySetInnerHTML={{ __html: html }} />;
+    } else if (data.type === 'html') {
+      body = <div dangerouslySetInnerHTML={{ __html: data.content || '' }} />;
+    } else if (data.type === 'text') {
+      body = <div className="text-6xl">{data.content}</div>;
+    } else if (data.type === 'image') {
+      body = (
+        <img
+          src={data.content}
+          className="w-full h-[calc(100vh-2rem)] object-contain"
+          alt=""
+        />
+      );
     }
   }
 
   return (
-    <div className="w-screen h-screen bg-black p-8 flex items-center justify-center">
-      {body}
+    <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
+      <div className="w-full h-full">{body}</div>
     </div>
   );
 }
