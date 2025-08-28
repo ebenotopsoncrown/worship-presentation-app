@@ -1,11 +1,5 @@
  'use client';
 
-import Link from 'next/link';
-import NavigationBar from './NavigationBar';
-
-// inside your header JSX:
-<NavigationBar />
-
 type NavLink = { href: string; label: string };
 
 const LINKS: NavLink[] = [
