@@ -1,6 +1,6 @@
 // components/PreviewBoard.tsx
-import React, { useEffect, useState } from 'react'
-import type { Slot } from '../utils/firebase';
+import React, { useEffect, useState } from 'react';
+import { db, ref, onValue } from '../utils/firebase';  // ✅ add onValue, use ref (not dbRef)
 
 const SLOT_COUNT = 4
 
