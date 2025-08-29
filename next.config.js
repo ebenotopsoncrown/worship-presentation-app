@@ -1,17 +1,10 @@
-node_modules/
-.next/
-out/
-dist/
-.vercel/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true,
+  swcMinify: true,
+  productionBrowserSourceMaps: true,
+  // If you meant to customize the build folder, do it like this (NO slash):
+  // distDir: '.next',
+};
 
-.env
-.env.*
-!.env.example
-
-.DS_Store
-Thumbs.db
-
-public/slides/
+module.exports = nextConfig;
