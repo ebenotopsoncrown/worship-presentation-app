@@ -1,8 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  typescript: { ignoreBuildErrors: true },
-  eslint: { ignoreDuringBuilds: true },
-}
-module.exports = nextConfig
- 
+  swcMinify: true,
+  productionBrowserSourceMaps: true, // <-- add this
+};
+
+module.exports = nextConfig;
