@@ -35,11 +35,10 @@ export default function BibleDisplay() {
     }
     setBusy(true);
     try {
-      // NOTE: confirm the param name your API expects: `ver` vs `ve`
+      // NOTE: the query key here is "ver", make sure your API handler reads `req.query.ver`
       const r = await fetch(`/api/bible?q=${encodeURIComponent(q)}&ver=${encodeURIComponent(ver)}`);
       const data = (await r.json()) as ApiOk & ApiErr;
       if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
-
       const verses = Array.isArray(data?.verses) ? data.verses : [];
       setPreviewHtml(toHtml(data.ref || q, verses));
     } catch (e: any) {
@@ -100,6 +99,8 @@ export default function BibleDisplay() {
       >
         Send to Preview
       </button>
+
+      {error && <span className="text-rose-400 text-sm ml-2">{error}</span>}
     </div>
   );
 }
