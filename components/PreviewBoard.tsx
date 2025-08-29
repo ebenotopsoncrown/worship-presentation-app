@@ -1,12 +1,12 @@
 // components/PreviewBoard.tsx
 import React, { useEffect, useState } from 'react'
-import { db, dbRef, onValue, set } from '../utils/firebase'
+import type { Slot } from '../utils/firebase';
 
 const SLOT_COUNT = 4
 
-export default function PreviewBoard() {
-  const [board, setBoard] = useState<string[][]>(Array.from({ length: SLOT_COUNT }, () => []))
-
+export default function PreviewPanel({ slot, title }: { slot: Slot; title: string }) {
+  // ...
+}
   useEffect(() => {
     const off = onValue(dbRef(db, 'preview_board'), snap => {
       const v = snap.val() as string[][] | null
