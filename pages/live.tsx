@@ -1,5 +1,6 @@
 // pages/live.tsx
 'use client';
+
 import React from 'react';
 import { listenLive } from '../utils/firebase';
 
@@ -11,9 +12,7 @@ export default function Live() {
     return () => off();
   }, []);
 
-  let body: React.ReactNode = (
-    <div className="text-zinc-400">Nothing live</div>
-  );
+  let body: React.ReactNode = <div className="text-zinc-400">Nothing live</div>;
 
   if (data) {
     if (data.kind === 'slides') {
@@ -24,13 +23,7 @@ export default function Live() {
     } else if (data.type === 'text') {
       body = <div className="text-6xl">{data.content}</div>;
     } else if (data.type === 'image') {
-      body = (
-        <img
-          src={data.content}
-          className="w-full h-[calc(100vh-2rem)] object-contain"
-          alt=""
-        />
-      );
+      body = <img src={data.content} className="w-full h-[calc(100vh-2rem)] object-contain" alt="" />;
     }
   }
 
