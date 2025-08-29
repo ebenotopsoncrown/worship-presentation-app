@@ -1,79 +1,78 @@
 // utils/firebase.ts
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import {
-  getDatabase, ref, onValue, set, update, remove,
-  DataSnapshot, Unsubscribe,
-} from 'firebase/database';
+'use client';
 
-const firebaseConfig = {
+import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
+import {
+  getDatabase,
+  ref as dbRef,
+  onValue as dbOnValue,
+  set as dbSet,
+  update as dbUpdate,
+  remove as dbRemove,
+  get as dbGet,
+  child as dbChild,
+  type Database,
+} from 'firebase/database';
+import {
+  getAuth,
+  onAuthStateChanged,
+  signOut,
+  type Auth,
+} from 'firebase/auth';
+
+// ---- CONFIG (must be set in Vercel/GitHub env) ----
+const config = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
-  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL!,
+  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL!, // exact RTDB URL for your region
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET!,
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID!,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
 };
 
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-export const db = getDatabase(app);
+// ---- INIT ONCE ----
+const app: FirebaseApp = getApps().length ? getApps()[0] : initializeApp(config);
+export const db: Database = getDatabase(app, config.databaseURL);
+export const auth: Auth = getAuth(app);
 
-export type HtmlPayload   = { kind?: 'html';   html: string;  meta?: any };
-export type SlidesPayload = { kind: 'slides';  slides: string[]; index?: number; meta?: any };
-export type PreviewPayload = HtmlPayload | SlidesPayload | null;
+// Re-export raw helpers so existing code can do: onValue(ref(db, 'path'), cb)
+export {
+  dbRef as ref,
+  dbOnValue as onValue,
+  dbSet as set,
+  dbUpdate as update,
+  dbRemove as remove,
+  dbGet as get,
+  dbChild as child,
+  onAuthStateChanged,
+  signOut,
+};
 
-export const liveRef    = () => ref(db, 'live_content');
-export const previewRef = (slot: number) => ref(db, `preview_slots/${slot}`);
+// ---- TYPES ----
+export type Slot = 1 | 2 | 3 | 4;
 
-export function listenLiveContent(
-  cb: (v: { html: string; meta?: any } | null, snap?: DataSnapshot) => void
-): Unsubscribe {
-  return onValue(liveRef(), (snap) => cb(snap.val(), snap));
-}
+type PreviewText = { type: 'text' | 'html'; content: string; meta?: any };
+type PreviewImage = { type: 'image'; content: string; meta?: any };
+type PreviewSlides = { type: 'slides'; slides: string[]; index?: number; meta?: any };
+export type PreviewPayload = PreviewText | PreviewImage | PreviewSlides;
 
-export function listenPreviewSlot(
-  slot: number,
-  cb: (v: PreviewPayload, snap?: DataSnapshot) => void
-): Unsubscribe {
-  return onValue(previewRef(slot), (snap) => cb(snap.val(), snap));
-}
+// ---- PREVIEW/LIVE HELPERS ----
+const slotPath = (slot: Slot) => `previews/${slot}`;
 
-export async function setLiveContent(payload: { html: string; meta?: any }) {
-  await set(liveRef(), payload);
-}
-export async function clearLiveContent() { await remove(liveRef()); }
+export const setPreviewSlot = (slot: Slot, payload: PreviewPayload) =>
+  dbSet(dbRef(db, slotPath(slot)), payload);
 
-export async function setPreviewSlot(slot: number, payload: HtmlPayload | SlidesPayload) {
-  await set(previewRef(slot), payload);
-}
-export async function updatePreviewSlot(slot: number, patch: Partial<SlidesPayload & HtmlPayload>) {
-  await update(previewRef(slot), patch as any);
-}
-export async function clearPreviewSlot(slot: number) { await set(previewRef(slot), null); }
-export async function setPreviewIndex(slot: number, index: number) {
-  await update(previewRef(slot), { index });
-}
+export const clearPreviewSlot = (slot: Slot) =>
+  dbRemove(dbRef(db, slotPath(slot)));
 
-export async function pushSlidesToPreview(slot: number, slides: string[], meta?: any, startIndex = 0) {
-  await setPreviewSlot(slot, { kind: 'slides', slides, index: startIndex, meta });
-}
+export const listenPreviewSlot = (slot: Slot, cb: (val: any) => void) =>
+  dbOnValue(dbRef(db, slotPath(slot)), snap => cb(snap.val()));
 
-export async function pushLiveFromPreview(slot: number, index?: number) {
-  return new Promise<void>((resolve, reject) => {
-    const unsub = onValue(previewRef(slot), async (snap) => {
-      try {
-        const val = snap.val() as PreviewPayload;
-        if (!val) return resolve(unsub());
-        if ((val as SlidesPayload).slides) {
-          const p = val as SlidesPayload;
-          const i = typeof index === 'number' ? index : (p.index ?? 0);
-          const html = p.slides[i] ?? '';
-          await setLiveContent({ html, meta: { fromPreview: slot, index: i, total: p.slides.length } });
-        } else if ((val as HtmlPayload).html) {
-          await setLiveContent({ html: (val as HtmlPayload).html, meta: { fromPreview: slot } });
-        }
-        resolve(unsub());
-      } catch (e) { reject(e); }
-    }, { onlyOnce: true });
-  });
-}
+export const copyPreviewToLive = async (slot: Slot) => {
+  const snap = await dbGet(dbRef(db, slotPath(slot)));
+  return dbSet(dbRef(db, 'live'), snap.val() ?? null);
+};
+
+export const listenLive = (cb: (val: any) => void) =>
+  dbOnValue(dbRef(db, 'live'), snap => cb(snap.val()));
