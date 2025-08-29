@@ -1,16 +1,17 @@
-// components/NavigationBar.tsx
-'use client';
-import Link from 'next/link';
+node_modules/
+.next/
+out/
+dist/
+.vercel/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-export default function NavigationBar() {
-  return (
-    <nav className="flex items-center gap-3 text-sm">
-      <Link href="/" className="px-3 py-1.5 rounded bg-white/10 hover:bg-white/20">
-        Operator
-      </Link>
-      <Link href="/live" className="px-3 py-1.5 rounded bg-white/10 hover:bg-white/20">
-        Live
-      </Link>
-    </nav>
-  );
-}
+.env
+.env.*
+!.env.example
+
+.DS_Store
+Thumbs.db
+
+public/slides/
