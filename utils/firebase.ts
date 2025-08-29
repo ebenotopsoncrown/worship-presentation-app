@@ -76,3 +76,21 @@ export const copyPreviewToLive = async (slot: Slot) => {
 
 export const listenLive = (cb: (val: any) => void) =>
   dbOnValue(dbRef(db, 'live'), snap => cb(snap.val()));
+
+if (typeof window !== 'undefined') {
+  const check: Record<string, unknown> = {
+    setPreviewSlot,
+    clearPreviewSlot,
+    listenPreviewSlot,
+    copyPreviewToLive,
+    listenLive,
+    ref,      // re-export from RTDB
+    onValue,  // re-export from RTDB
+  };
+  Object.entries(check).forEach(([name, val]) => {
+    if (typeof val !== 'function') {
+      console.error(`[firebase] "${name}" is NOT a function. Got:`, val);
+    }
+  });
+}
+
