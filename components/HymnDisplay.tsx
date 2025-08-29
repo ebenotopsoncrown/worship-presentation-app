@@ -2,8 +2,7 @@
 'use client';
 
 import React from 'react';
-import { db, ref, onValue, setPreviewSlot, type Slot } from '../utils/firebase';
-
+import { listenHymnLibrary, setPreviewSlot, type Slot } from '../utils/firebase';
 type Hymn = {
   id: string;
   number?: number;
@@ -65,7 +64,7 @@ export default function HymnDisplay() {
   const [selected, setSelected] = React.useState<Hymn | null>(null);
 
   React.useEffect(() => {
-    const r = ref('hymn_library'); // under RTDB root
+    const off = listenHymnLibrary((val) => {
     const off = onValue(r, (snap) => {
       const val = snap.val() || {};
       const list: Hymn[] = Object.keys(val).map((k) => ({ id: k, ...val[k] }));
