@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { db, ref as dbRef, onValue } from '../utils/firebase'
+import type { Slot } from '../utils/firebase';
 
 type Theme = {
   fontSize: number
@@ -10,6 +10,9 @@ type Theme = {
   align: 'center' | 'left'
 }
 
+export default function PreviewPanel({ slot, title }: { slot: Slot; title: string }) {
+  // ...
+}
 export default function PreviewPane({ html }: { html: string }) {
   const [theme, setTheme] = useState<Theme>({
     fontSize: 48, textColor: '#ffffff', bgColor: '#000000', lowerThird:false, align:'center'
