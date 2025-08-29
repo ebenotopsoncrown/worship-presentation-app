@@ -18,14 +18,13 @@ export default function NavigationBar() {
   return (
     <nav className="flex flex-wrap items-center gap-2">
       {LINKS.map(({ href, label }) => {
-        const active =
-          asPath === href || (href !== '/' && asPath.startsWith(href));
+        const active = asPath === href || (href !== '/' && asPath.startsWith(href));
         const cls = [
           'px-3 py-1.5 rounded-md text-sm transition-colors',
           active ? 'bg-white/15 text-white' : 'text-zinc-200 hover:bg-white/10 hover:text-white',
         ].join(' ');
         return (
-          <Link href={href} className={cls} key={href}>
+          <Link key={href} href={href} className={cls}>
             {label}
           </Link>
         );
