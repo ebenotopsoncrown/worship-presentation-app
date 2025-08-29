@@ -9,7 +9,9 @@ type ApiOk = { ref: string; verses: Verse[] };
 type ApiErr = { error?: string };
 
 const toHtml = (ref: string, verses: Verse[]) => {
-  const body = verses.map((v) => `<span class="opacity-60 mr-2">${v.v}</span>${v.t}`).join('<br/>');
+  const body = verses
+    .map((v) => `<span class="opacity-60 mr-2">${v.v}</span>${v.t}`)
+    .join('<br/>');
   return `
     <div style="font-size:.95rem;opacity:.8;margin-bottom:.25rem">${ref}</div>
     <div style="font-size:2.2rem;line-height:1.25">${body}</div>`;
@@ -33,9 +35,11 @@ export default function BibleDisplay() {
     }
     setBusy(true);
     try {
+      // NOTE: confirm the param name your API expects: `ver` vs `ve`
       const r = await fetch(`/api/bible?q=${encodeURIComponent(q)}&ver=${encodeURIComponent(ver)}`);
       const data = (await r.json()) as ApiOk & ApiErr;
       if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
+
       const verses = Array.isArray(data?.verses) ? data.verses : [];
       setPreviewHtml(toHtml(data.ref || q, verses));
     } catch (e: any) {
