@@ -1,17 +1,17 @@
 'use client';
 
 import React from 'react';
+import { db, ref as dbRef, onValue, set } from '../utils/firebase';
+
 type Presentation = {
   versesPerSlide: number;
-import { db, ref as dbRef, onValue, set } from '../utils/firebase'
+  // add any other fields you have, but keep the closing brace + semicolon
+};
 
 type Theme = {
-  fontSize: number
-  textColor: string
-  bgColor: string
-  lowerThird: boolean
-  align: 'center' | 'left'
-}
+  fontSize: number;
+  // add other theme fields here
+};
 
 const DEFAULT: Theme = {
   fontSize: 48,
