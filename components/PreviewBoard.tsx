@@ -2,12 +2,19 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { dbRef, onValue, type Slot } from '../utils/firebase';
+import { db, dbRef, onValue, type Slot } from '../utils/firebase';
 
-type PanelContent =
-  | { type: 'html'; content: string }
-  | { kind: 'slides'; slides: string[]; index?: number }
-  | null;
+type HtmlContent = { type: 'html'; content: string };
+type SlidesContent = { kind: 'slides'; slides: string[]; index?: number };
+type PanelContent = HtmlContent | SlidesContent | null;
+
+// Type guards to narrow the union safely
+function isHtml(c: PanelContent): c is HtmlContent {
+  return !!c && (c as any).type === 'html';
+}
+function isSlides(c: PanelContent): c is SlidesContent {
+  return !!c && (c as any).kind === 'slides';
+}
 
 export default function PreviewPanel({
   slot,
@@ -19,12 +26,14 @@ export default function PreviewPanel({
   const [content, setContent] = useState<PanelContent>(null);
 
   useEffect(() => {
-    const off = onValue(dbRef('' as any, `previews/${slot}`), snap => {
+    // ref(db, `previews/${slot}`)
+    const unsubscribe = onValue(dbRef(db, `previews/${slot}`), (snap) => {
       setContent((snap.val() as PanelContent) ?? null);
     });
+
+    // onValue returns an unsubscribe function
     return () => {
-      // in compat/v9 onValue returns an unsubscribe function
-      if (typeof off === 'function') off();
+      if (typeof unsubscribe === 'function') unsubscribe();
     };
   }, [slot]);
 
@@ -35,12 +44,12 @@ export default function PreviewPanel({
       </div>
 
       <div className="p-4 min-h-[360px] flex items-center justify-center">
-        {content?.type === 'html' ? (
+        {isHtml(content) ? (
           <div
             className="w-full"
             dangerouslySetInnerHTML={{ __html: content.content }}
           />
-        ) : content?.kind === 'slides' ? (
+        ) : isSlides(content) ? (
           <div className="text-zinc-200">
             {content.slides?.[content.index ?? 0] ?? 'Empty'}
           </div>
