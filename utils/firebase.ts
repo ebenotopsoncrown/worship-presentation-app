@@ -1,4 +1,3 @@
-// utils/firebase.ts
 'use client';
 
 import { initializeApp, getApp, getApps } from 'firebase/app';
@@ -45,14 +44,10 @@ export const db: Database = firebaseConfig.databaseURL
   ? getDatabase(app, firebaseConfig.databaseURL)
   : getDatabase(app);
 
-/* ------------------------------------------------------------------ */
-/* Re-exports (canonical names)                                        */
-/* ------------------------------------------------------------------ */
+/* Canonical exports used by components */
 export { ref, onValue, set, update, remove, get, child };
 
-/* ------------------------------------------------------------------ */
-/* Re-exports (compat aliases to match existing code)                  */
-/* ------------------------------------------------------------------ */
+/* Back-compat aliases some files used earlier */
 export {
   ref as dbRef,
   onValue as dbOnValue,
@@ -70,7 +65,7 @@ export {
 };
 
 /* ------------------------------------------------------------------ */
-/* Shared types + helpers (previews & live)                            */
+/* Shared types + helpers                                              */
 /* ------------------------------------------------------------------ */
 
 export type Slot = 1 | 2 | 3 | 4;
@@ -83,7 +78,6 @@ export type LivePayload = PreviewPayload | null;
 
 const slotPath = (slot: Slot) => `previews/${slot}`;
 
-// Accept number or Slot everywhere and normalize safely
 function normalizeSlot(s: Slot | number): Slot {
   const n = Number(s);
   if (!Number.isInteger(n) || n < 1 || n > SLOT_COUNT) {
