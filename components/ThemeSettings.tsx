@@ -1,4 +1,8 @@
-import { useEffect, useState } from 'react'
+'use client';
+
+import React from 'react';
+type Presentation = {
+  versesPerSlide: number;
 import { db, ref as dbRef, onValue, set } from '../utils/firebase'
 
 type Theme = {
@@ -86,6 +90,28 @@ export default function ThemeSettings() {
           className="mt-2 px-3 py-1 border rounded">Save Presentation Settings</button>
 </div>
 
-const [presentation, setPresentation] = useState<any>({ versesPerSlide:2, hymnLinesPerSlide:2 })
-useEffect(()=> onValue(dbRef(db,'settings/presentation'), s => setPresentation({ ...{versesPerSlide:2,hymnLinesPerSlide:2 }, ...(s.val()||{}) })),[])
+const [presentation, setPresentation] = React.useState<Presentation>({
+    versesPerSlide: 2, // keep your existing default if different
+  });
 
+  // ...any other hooks/handlers
+
+  return (
+    <>
+      <label className="w-40">Verses per slide</label>
+      <input
+        className="border px-2 py-1 w-20 rounded"
+        type="number"
+        min={1}
+        value={presentation?.versesPerSlide ?? 2}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+          setPresentation((p) => ({
+            ...p,
+            versesPerSlide: Math.max(1, Number(e.target.value || 1)),
+          }))
+        }
+      />
+      {/* ...rest of the component */}
+    </>
+  );
+}
