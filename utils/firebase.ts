@@ -62,6 +62,13 @@ export const listenPreviewSlot = (
 
 /** ---------- Live helpers ---------- */
 
+export type LivePayload = {
+  html?: string;
+  lines?: string[];
+  title?: string;
+  from?: string;
+} | null;
+
 export const setLiveContent = (payload: any) =>
   set(ref(db, livePath), payload);
 
@@ -72,3 +79,13 @@ export const listenLive = (cb: (payload: any) => void) =>
 
 export const listenPreviewBoard = (cb: (value: any) => void) =>
   onValue(ref(db, boardPath), snap => cb(snap.val()));
+
+export function subscribeToLive(
+  cb: (value: LivePayload) => void
+): () => void {
+  const r = ref(db, 'live');          // use your existing exported `db` and `ref`
+  // onValue returns an unsubscribe function
+  return onValue(r, snap => {
+    cb(snap.exists() ? (snap.val() as LivePayload) : null);
+  });
+}
