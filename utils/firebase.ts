@@ -53,7 +53,6 @@ export { ref, onValue, set, update, remove, get, child };
 /* ------------------------------------------------------------------ */
 /* Re-exports (compat aliases to match existing code)                  */
 /* ------------------------------------------------------------------ */
-// Many components import these names; provide them to stop build breaks.
 export {
   ref as dbRef,
   onValue as dbOnValue,
@@ -62,7 +61,7 @@ export {
   remove as dbRemove,
 };
 
-/* Auth helpers used in pages/login, etc. */
+/* Auth helpers */
 export {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -84,33 +83,47 @@ export type LivePayload = PreviewPayload | null;
 
 const slotPath = (slot: Slot) => `previews/${slot}`;
 
+// Accept number or Slot everywhere and normalize safely
+function normalizeSlot(s: Slot | number): Slot {
+  const n = Number(s);
+  if (!Number.isInteger(n) || n < 1 || n > SLOT_COUNT) {
+    throw new Error(`Invalid slot "${s}" — must be 1..${SLOT_COUNT}`);
+  }
+  return n as Slot;
+}
+
 /* ------------------------------ Previews --------------------------- */
 
-export function setPreviewSlot(slot: Slot, payload: PreviewPayload) {
-  return set(ref(db, slotPath(slot)), payload);
+export function setPreviewSlot(slot: Slot | number, payload: PreviewPayload) {
+  const n = normalizeSlot(slot);
+  return set(ref(db, slotPath(n)), payload);
 }
 
-export function setPreviewIndex(slot: Slot, index: number) {
-  return update(ref(db, slotPath(slot)), { index });
+export function setPreviewIndex(slot: Slot | number, index: number) {
+  const n = normalizeSlot(slot);
+  return update(ref(db, slotPath(n)), { index });
 }
 
-export function clearPreviewSlot(slot: Slot) {
-  return remove(ref(db, slotPath(slot)));
+export function clearPreviewSlot(slot: Slot | number) {
+  const n = normalizeSlot(slot);
+  return remove(ref(db, slotPath(n)));
 }
 
 export function listenPreviewSlot(
-  slot: Slot,
+  slot: Slot | number,
   cb: (payload: PreviewPayload | null) => void
 ): () => void {
-  const r = ref(db, slotPath(slot));
+  const n = normalizeSlot(slot);
+  const r = ref(db, slotPath(n));
   return onValue(r, (snap) => {
     cb(snap.exists() ? (snap.val() as PreviewPayload) : null);
   });
 }
 
-export async function copyPreviewToLive(slot: Slot) {
+export async function copyPreviewToLive(slot: Slot | number) {
+  const n = normalizeSlot(slot);
   const root = ref(db);
-  const snap = await get(child(root, slotPath(slot)));
+  const snap = await get(child(root, slotPath(n)));
   return set(ref(db, 'live'), snap.exists() ? snap.val() : null);
 }
 
