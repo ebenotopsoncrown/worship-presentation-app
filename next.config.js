@@ -2,8 +2,6 @@
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
-  productionBrowserSourceMaps: true,
-  // distDir: '.next',
+  productionBrowserSourceMaps: true
 };
-
-export default nextConfig;
+module.exports = nextConfig;
