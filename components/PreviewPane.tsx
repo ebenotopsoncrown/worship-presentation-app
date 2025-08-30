@@ -1,44 +1,42 @@
-'use client'
-import { useEffect, useState } from 'react'
+// components/PreviewPane.tsx
+'use client';
+
+import React from 'react';
 import type { Slot } from '../utils/firebase';
 
-type Theme = {
-  fontSize: number
-  textColor: string
-  bgColor: string
-  lowerThird: boolean
-  align: 'center' | 'left'
-}
+type PanelProps = { slot: Slot; title: string };
+type HtmlProps = { html: string };
 
-export default function PreviewPanel({ slot, title }: { slot: Slot; title: string }) {
-  // ...
-}
-export default function PreviewPane({ html }: { html: string }) {
-  const [theme, setTheme] = useState<Theme>({
-    fontSize: 48, textColor: '#ffffff', bgColor: '#000000', lowerThird:false, align:'center'
-  })
-  useEffect(() => {
-    const u = onValue(dbRef(db, 'settings/theme'), s => {
-      const t = s.val() || {}
-      setTheme(prev => ({ ...prev, ...t }))
-    })
-    return () => u()
-  }, [])
-
-  const vAlign = theme.lowerThird ? 'justify-end' : 'justify-center'
-  const paddingBottom = theme.lowerThird ? 'pb-8' : ''
-
+/**
+ * Default export — keep the same signature used elsewhere (slot + title)
+ * This is a simple shell panel; the data rendering is handled by PreviewBoard.tsx
+ * or by other listeners in your page.
+ */
+export default function PreviewPane({ slot, title }: PanelProps) {
   return (
-    <div style={{ background: theme.bgColor, color: theme.textColor }}
-         className={`rounded border h-full min-h-[420px] w-full overflow-auto flex ${vAlign} items-center ${paddingBottom}`}>
-      <div className="w-full px-8" style={{ fontSize: theme.fontSize, textAlign: theme.align }}>
-        {/* If HTML-ish, render as HTML; otherwise show as text */}
-        { /<\w+/i.test(html || '') ? (
-          <div dangerouslySetInnerHTML={{ __html: html || '' }} />
-        ) : (
-          <p>{html}</p>
-        )}
+    <div className="rounded-2xl overflow-hidden bg-zinc-900">
+      <div className="p-3 text-sm font-semibold text-white bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500">
+        {title}
+      </div>
+
+      <div className="p-4 min-h-[360px] flex items-center justify-center text-zinc-400">
+        {/* Content is populated by the preview listeners elsewhere */}
+        Empty
       </div>
     </div>
-  )
+  );
+}
+
+/**
+ * Named export for when you want to directly show HTML.
+ * Usage: import PreviewPane, { PreviewPaneHtml } from '@/components/PreviewPane'
+ */
+export function PreviewPaneHtml({ html }: HtmlProps) {
+  return (
+    <div className="rounded-2xl overflow-hidden bg-zinc-900">
+      <div className="p-4 min-h-[360px] flex items-center justify-center">
+        <div className="w-full" dangerouslySetInnerHTML={{ __html: html }} />
+      </div>
+    </div>
+  );
 }
