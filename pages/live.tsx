@@ -13,6 +13,38 @@ export default function LivePage() {
     () => live?.html ?? (live?.lines ? live.lines.join('<br/>') : '<div style="opacity:.5">Waiting for content…</div>'),
     [live]
   );
+'use client';
+import React from 'react';
+import { subscribeToLive } from '../utils/firebase';
+
+export default function LivePage() {
+  const [html, setHtml] = React.useState<string>('Welcome to church!');
+
+  React.useEffect(() => {
+    const off = subscribeToLive((payload) => {
+      if (!payload) return setHtml(''); // blank
+      if ((payload as any).type === 'html') {
+        setHtml((payload as any).content);
+      } else if ((payload as any).kind === 'slides') {
+        const p = payload as any;
+        setHtml(p.slides?.[p.index ?? 0] ?? '');
+      } else {
+        setHtml('');
+      }
+    });
+    return off;
+  }, []);
+
+  return (
+    <div className="w-full h-screen bg-black text-white flex items-center justify-center">
+      <div
+        className="max-w-5xl px-8"
+        style={{ fontSize: '64px', lineHeight: 1.2, textAlign: 'center' }}
+        dangerouslySetInnerHTML={{ __html: html || ' ' }}
+      />
+    </div>
+  );
+}
 
   // Subscribe to live content
   useEffect(() => {
