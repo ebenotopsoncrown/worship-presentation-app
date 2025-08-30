@@ -1,5 +1,25 @@
 // utils/firebase.ts
-import { initializeApp, getApps, getApp } from 'firebase/app';
+'use client';
+
+/**
+ * Centralized Firebase client (App Router / Next.js compatible)
+ * - Initializes the app exactly once
+ * - Exposes Auth + RTDB instances
+ * - Re-exports the modular helpers you use across the app
+ * - Adds small, typed helpers for previews & live payloads
+ */
+
+import { initializeApp, getApp, getApps } from 'firebase/app';
+
+import {
+  getAuth,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail,
+  signOut,
+  type Auth,
+} from 'firebase/auth';
+
 import {
   getDatabase,
   ref,
@@ -7,85 +27,120 @@ import {
   set,
   update,
   remove,
-  child,
   get,
+  child,
   type Database,
 } from 'firebase/database';
-import { getAuth } from 'firebase/auth';
 
-/** IMPORTANT: all NEXT_PUBLIC_* envs must be set in Vercel */
+/* ------------------------------------------------------------------ */
+/* Configuration / initialization                                      */
+/* ------------------------------------------------------------------ */
+
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
-  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DB_URL!,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET!,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID!,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL, // <- keep set to your region URL
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-export const db: Database = getDatabase(app);
-export const auth = getAuth(app);
+/** Firebase Auth + RTDB singletons */
+export const auth: Auth = getAuth(app);
+/**
+ * Pass the explicit DB URL (when provided) to avoid region warnings.
+ * If NEXT_PUBLIC_FIREBASE_DATABASE_URL is undefined, getDatabase(app) still works.
+ */
+export const db: Database = firebaseConfig.databaseURL
+  ? getDatabase(app, firebaseConfig.databaseURL)
+  : getDatabase(app);
 
-/** Re-exports so existing imports keep working */
-export { ref, onValue, set, update, remove, child, get };
-export { ref as dbRef }; // some files import { dbRef } specifically
+/* ------------------------------------------------------------------ */
+/* Re-exports for convenience (what your code already imports)         */
+/* ------------------------------------------------------------------ */
 
-/** Keep Slot flexible across the app to avoid TS friction */
-export type Slot = number;
+// RTDB helpers
+export { ref, onValue, set, update, remove, get, child };
 
-/** Payloads used around previews/live (kept permissive to avoid type clashes) */
-export type PreviewPayload = any;
+// Auth helpers used across the app (fixes Vercel error)
+export {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail,
+  signOut,
+};
 
-/** Paths */
-const previewPath = (slot: Slot) => `previews/${slot}`;
-const livePath = `live_content`;
-const boardPath = `preview_board`;
+/* ------------------------------------------------------------------ */
+/* Shared types and helpers used by the app                            */
+/* ------------------------------------------------------------------ */
 
-/** ---------- Preview helpers ---------- */
+/** Numbered preview slots in your UI */
+export type Slot = 1 | 2 | 3 | 4;
+export const SLOT_COUNT = 4;
 
-export const setPreviewSlot = (slot: Slot, payload: PreviewPayload) =>
-  set(ref(db, previewPath(slot)), payload);
+/** Preview / live payloads */
+export type HtmlPayload = { type: 'html'; content: string };
+export type SlidesPayload = { kind: 'slides'; slides: string[]; index?: number };
+export type PreviewPayload = HtmlPayload | SlidesPayload;
+export type LivePayload = PreviewPayload | null;
 
-export const clearPreviewSlot = (slot: Slot) =>
-  remove(ref(db, previewPath(slot)));
+const slotPath = (slot: Slot) => `previews/${slot}`;
 
-export const setPreviewIndex = (slot: Slot, index: number) =>
-  update(ref(db, previewPath(slot)), { index });
+/* ------------------------------ Previews --------------------------- */
 
-export const listenPreviewSlot = (
+/** Write a payload into a preview slot */
+export function setPreviewSlot(slot: Slot, payload: PreviewPayload) {
+  return set(ref(db, slotPath(slot)), payload);
+}
+
+/** Update only the index inside a slides payload for a slot */
+export function setPreviewIndex(slot: Slot, index: number) {
+  return update(ref(db, slotPath(slot)), { index });
+}
+
+/** Remove/clear a preview slot */
+export function clearPreviewSlot(slot: Slot) {
+  return remove(ref(db, slotPath(slot)));
+}
+
+/**
+ * Subscribe to a preview slot. Returns an unsubscribe function.
+ * Usage:
+ *   const off = listenPreviewSlot(1, v => { ... });
+ *   // later
+ *   off();
+ */
+export function listenPreviewSlot(
   slot: Slot,
   cb: (payload: PreviewPayload | null) => void
-) => onValue(ref(db, previewPath(slot)), snap => cb((snap.val() as any) ?? null));
-
-/** ---------- Live helpers ---------- */
-
-export type LivePayload = {
-  html?: string;
-  lines?: string[];
-  title?: string;
-  from?: string;
-} | null;
-
-export const setLiveContent = (payload: any) =>
-  set(ref(db, livePath), payload);
-
-export const listenLive = (cb: (payload: any) => void) =>
-  onValue(ref(db, livePath), snap => cb(snap.val()));
-
-/** ---------- Board helpers (if used) ---------- */
-
-export const listenPreviewBoard = (cb: (value: any) => void) =>
-  onValue(ref(db, boardPath), snap => cb(snap.val()));
-
-export function subscribeToLive(
-  cb: (value: LivePayload) => void
 ): () => void {
-  const r = ref(db, 'live');          // use your existing exported `db` and `ref`
-  // onValue returns an unsubscribe function
-  return onValue(r, snap => {
+  const r = ref(db, slotPath(slot));
+  return onValue(r, (snap) => {
+    cb(snap.exists() ? (snap.val() as PreviewPayload) : null);
+  });
+}
+
+/** Copy a preview slot's value to /live */
+export async function copyPreviewToLive(slot: Slot) {
+  const root = ref(db);
+  const snap = await get(child(root, slotPath(slot)));
+  return set(ref(db, 'live'), snap.exists() ? snap.val() : null);
+}
+
+/* ------------------------------- Live ------------------------------ */
+
+/** Set /live payload directly */
+export function setLiveContent(payload: LivePayload) {
+  return set(ref(db, 'live'), payload);
+}
+
+/** Subscribe to /live. Returns unsubscribe. */
+export function subscribeToLive(cb: (value: LivePayload) => void): () => void {
+  const r = ref(db, 'live');
+  return onValue(r, (snap) => {
     cb(snap.exists() ? (snap.val() as LivePayload) : null);
   });
 }
